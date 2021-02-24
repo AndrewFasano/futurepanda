@@ -2189,6 +2189,7 @@ subdir('qom')
 subdir('authz')
 subdir('crypto')
 subdir('ui')
+subdir('panda')
 
 
 if enable_modules
