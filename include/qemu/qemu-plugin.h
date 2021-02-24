@@ -647,4 +647,6 @@ uint64_t qemu_plugin_end_code(void);
  */
 uint64_t qemu_plugin_entry_code(void);
 
+void insert_call(void *func_ptr, int arg_c, ...);
+
 #endif /* QEMU_PLUGIN_API_H */
