@@ -3032,6 +3032,7 @@ subdir('authz')
 subdir('crypto')
 subdir('ui')
 subdir('hw')
+subdir('panda')
 
 
 if enable_modules
