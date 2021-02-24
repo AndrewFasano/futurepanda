@@ -411,4 +411,7 @@ int qemu_plugin_n_max_vcpus(void);
  */
 void qemu_plugin_outs(const char *string);
 
+void insert_call(void *func_ptr, int arg_c, ...);
+
+
 #endif /* QEMU_PLUGIN_API_H */

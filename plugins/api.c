@@ -201,6 +201,70 @@ qemu_plugin_tb_get_insn(const struct qemu_plugin_tb *tb, size_t idx)
     return insn;
 }
 
+
+TCGOp *find_first_guest_insn(void);
+
+TCGOp *find_first_guest_insn(void) {
+
+    TCGOp *first_guest_insn_mark = NULL; 
+    // TODO repro tcg/tc.c:3229
+    TCGContext *s;
+    s = tcg_ctx;
+    TCGOp *op, *op_next;
+
+    QTAILQ_FOREACH_SAFE(op, &s->ops, link, op_next) {
+      TCGOpcode opc = op->opc;
+      if (opc == INDEX_op_insn_start) {
+        first_guest_insn_mark = op;
+        break;
+      }
+    }
+
+    return first_guest_insn_mark;
+}
+
+void insert_call(void *func_ptr, int arg_c, ...) {
+    printf("Insert call\n");
+    TCGOp *first = find_first_guest_insn();
+
+		TCGOp *after_op = tcg_op_insert_after(tcg_ctx, first, INDEX_op_call);
+
+    int i=0;
+    /* TODO: Pass args to the function
+    va_list ap;
+    va_start(ap, arg_c);
+    for(i=0; i<arg_c; i++) {
+        // Add the arg to the tcg stream as a temp, then use that temp?
+        TCGv_i64 t = tcg_constant_i64(va_arg(ap, int64_t));
+        after_op->args[i] = (TCGArg)t;
+    }
+    va_end(ap);
+    i++;
+    */
+
+    /*
+    TCGv_i64 tmp = tcg_temp_new_i64();
+    TCGOp *before_call = tcg_op_insert_before(tcg_ctx, first, INDEX_op_mov_i64);
+    //TCGArg *store_args = &tcg_ctx.gen_opparam_buf[(*after_op)->args];
+    before_call->args[0] = tcgv_i64_arg(tmp);
+    before_call->args[1] = (TCGArg)0x1234;
+    before_call-> name = "test";
+    TCGOP_CALLI(before_call) = 2;
+    uintptr_t inserted = tcgv_i64_arg((TCGv_i64)tmp);
+
+    after_op->args[i] = inserted;
+    i++;
+    */
+
+    // Set function pointer
+    after_op->args[i] = (uintptr_t)func_ptr;
+
+    // Populate call op parameters.
+    TCGOP_CALLI(after_op) = i; // inputs  - param1
+    TCGOP_CALLO(after_op) = 0; // outputs - param2
+}
+
+
 /*
  * Instruction information
  *

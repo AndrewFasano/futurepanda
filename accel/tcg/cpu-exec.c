@@ -688,6 +688,8 @@ static inline void cpu_loop_exec_tb(CPUState *cpu, TranslationBlock *tb,
         return;
     }
 
+    printf("PANDA: need to fix this - exec has stalled -  are we in an infinite loop with insert_call?\n");
+
     /* Instruction counter expired.  */
     assert(icount_enabled());
 #ifndef CONFIG_USER_ONLY
