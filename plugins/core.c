@@ -53,6 +53,23 @@ struct qemu_plugin_ctx *plugin_id_to_ctx_locked(qemu_plugin_id_t id)
     return ctx;
 }
 
+GModule *plugin_name_to_handle(const char* name)
+{
+      struct qemu_plugin_ctx *ctx;
+      QTAILQ_FOREACH(ctx, &plugin.ctxs, entry) {
+          //if (ctx->installing || ctx->uninstalling || ctx->resetting) {
+          //    continue;
+          //}
+          if (is_plugin_named(*ctx, name)) {
+              return plugin_id_to_ctx_locked(ctx->id)->handle;
+          }
+      }
+
+    error_report("plugin: %s not loaded", name);
+    abort();
+    return NULL;
+}
+
 static void plugin_cpu_update__async(CPUState *cpu, run_on_cpu_data data)
 {
     bitmap_copy(cpu->plugin_mask, &data.host_ulong, QEMU_PLUGIN_EV_MAX);
