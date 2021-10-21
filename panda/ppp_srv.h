@@ -23,4 +23,3 @@ typedef int (*do_sub_t)(int x);
 PPP_IMPORT(ppp_srv, do_add);
 PPP_IMPORT(ppp_srv, do_sub);
 #endif
-
