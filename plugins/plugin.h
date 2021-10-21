@@ -63,6 +63,7 @@ struct qemu_plugin_ctx {
 };
 
 struct qemu_plugin_ctx *plugin_id_to_ctx_locked(qemu_plugin_id_t id);
+GModule *plugin_name_to_handle(const char* name);
 
 void plugin_register_inline_op(GArray **arr,
                                enum qemu_plugin_mem_rw rw,
@@ -96,5 +97,8 @@ void plugin_register_vcpu_mem_cb(GArray **arr,
                                  void *udata);
 
 void exec_inline_op(struct qemu_plugin_dyn_cb *cb);
+
+/* loader.c */
+bool is_plugin_named(struct qemu_plugin_ctx ctx, const char* name);
 
 #endif /* _PLUGIN_INTERNAL_H_ */

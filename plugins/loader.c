@@ -247,6 +247,18 @@ static int plugin_load(struct qemu_plugin_desc *desc, const qemu_info_t *info, E
     return 1;
 }
 
+/* Check if the given plugin is named name */
+bool is_plugin_named(struct qemu_plugin_ctx ctx, const char* name) {
+  char* plugin_bname = basename(ctx.desc->path);
+  // if name is foo, is basename libfoo.so?
+  // bail if the name lengths differ or are invalid
+  if (plugin_bname  == NULL || strlen(plugin_bname) != strlen(name) + 6) {
+    return false;
+  }
+
+  return strncmp(plugin_bname+3, name, strlen(plugin_bname)-6) == 0;
+}
+
 /* call after having removed @desc from the list */
 static void plugin_desc_free(struct qemu_plugin_desc *desc)
 {
