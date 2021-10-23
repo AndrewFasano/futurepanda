@@ -30,7 +30,22 @@ extern GModule* plugin_name_to_handle(const char*);
 
 */
 
+#define CONCAT2(x,y) x##y
+#define CONCAT(x,y) CONCAT2(x,y)
+#define PPP_NAME(plugin, fn) CONCAT(plugin, CONCAT(_,fn))
+#define PPP_SETUP_NAME(plugin, fn) CONCAT(_ppp_setup_, PPP_NAME(plugin, fn))
 
+#define PPP_IMPORT(plugin, fn) \
+  fn##_t PPP_NAME(plugin, fn); \
+  void PPP_SETUP_NAME(plugin, fn) (void); \
+  void __attribute__ ((constructor)) PPP_SETUP_NAME(plugin,fn) (void) { \
+      GModule *h = plugin_name_to_handle(#plugin); \
+      if (!h) { \
+          printf("Error loading plugin " # plugin "\n"); \
+      }else if (!g_module_symbol(h, #fn, (gpointer*)& PPP_NAME(plugin, fn) )) { \
+          printf("Error loading symbol " # fn " from library " # plugin "\n"); \
+      } \
+  }
 
 
 /****************************************************************

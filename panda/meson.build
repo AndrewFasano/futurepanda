@@ -1,5 +1,5 @@
 t = []
-foreach i : ['ppp_srv', 'ppp_client' ]
+foreach i : ['ppp_srv', 'ppp_client' , 'ppp_client2']
   t += shared_module(i, files(i + '.c'),
                      include_directories: '../include/qemu',
                      dependencies: glib)
