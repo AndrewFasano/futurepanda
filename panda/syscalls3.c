@@ -1,6 +1,3 @@
-// Simple syscalls hooking??
-// TODO: hook returns
-
 #include <inttypes.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -24,7 +21,6 @@ is_syscall_t is_syscall_fn = NULL;
 get_callno_t get_callno_fn = NULL;
 
 bool big_endian = false; // XXX TODO
-
 bool is_syscall_i386(unsigned char* buf, size_t buf_len) {
   assert(buf_len >= 2);
   // Check if the instruction is syscall (0F 05)
@@ -164,10 +160,9 @@ static void syscall_64(unsigned int cpu_index, void *udata) {
   }
   uint64_t pc = qemu_plugin_get_pc();
   PPP_RUN_CB(on_all_sys_enter, pc, callno);
-
 }
 
-int first = 0;
+//int first = 0;
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb) {
   // Handle to first insns
   size_t n = qemu_plugin_tb_n_insns(tb);
