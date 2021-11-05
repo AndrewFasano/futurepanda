@@ -226,10 +226,15 @@ void insert_call(void *func_ptr, int arg_c, ...) {
     printf("Insert call\n");
     TCGOp *first = find_first_guest_insn();
 
+    if (first == NULL) {
+      printf("NULL\n");
+    }
+
 		TCGOp *after_op = tcg_op_insert_after(tcg_ctx, first, INDEX_op_call);
 
     int i=0;
-    /* TODO: Pass args to the function
+#if 0
+    // Pass args to the function
     va_list ap;
     va_start(ap, arg_c);
     for(i=0; i<arg_c; i++) {
@@ -239,28 +244,28 @@ void insert_call(void *func_ptr, int arg_c, ...) {
     }
     va_end(ap);
     i++;
-    */
 
-    /*
     TCGv_i64 tmp = tcg_temp_new_i64();
     TCGOp *before_call = tcg_op_insert_before(tcg_ctx, first, INDEX_op_mov_i64);
     //TCGArg *store_args = &tcg_ctx.gen_opparam_buf[(*after_op)->args];
     before_call->args[0] = tcgv_i64_arg(tmp);
     before_call->args[1] = (TCGArg)0x1234;
-    before_call-> name = "test";
+    //before_call-> name = "test";
     TCGOP_CALLI(before_call) = 2;
     uintptr_t inserted = tcgv_i64_arg((TCGv_i64)tmp);
 
     after_op->args[i] = inserted;
     i++;
-    */
+#endif
 
     // Set function pointer
     after_op->args[i] = (uintptr_t)func_ptr;
+    after_op->life = 0;
 
     // Populate call op parameters.
     TCGOP_CALLI(after_op) = i; // inputs  - param1
     TCGOP_CALLO(after_op) = 0; // outputs - param2
+
 }
 
 
