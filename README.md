@@ -24,6 +24,14 @@ Run a plugin, `foo` on a qcow:
 
 Current status
 ----
-[] PPP-style inter-plugin interactions (callbacks + direct calls)
-[] API for accessing CPU state
+[x] PPP-style inter-plugin interactions (callbacks + direct calls)
+[partial] API for accessing CPU state
 [] API for modifying CPU state
+
+
+Current plugins
+----
+* `Syscalls3`: provide an `on_all_sys_enter` callback
+* `Syscalls_logger`: use syscalls3 to log syscall numbers on enter
+* `ppp_srv`: plugin which provides some PPP functions that other plugins can call
+* `ppp_client{,2}`: plugin which interacts with `ppp_srv`
