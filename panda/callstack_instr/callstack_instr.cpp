@@ -45,11 +45,11 @@ PANDAENDCOMMENT */
 #include "panda/plugin_plugin.h"
 
 // needed for the threaded stack_type
-#include "osi/osi_types.h"
-#include "osi/osi_ext.h"
-#include "wintrospection/wintrospection.h"
-#include "wintrospection/wintrospection_ext.h"
-#include "osi_linux/osi_linux_ext.h"
+//#include "osi/osi_types.h"
+//#include "osi/osi_ext.h"
+//#include "wintrospection/wintrospection.h"
+//#include "wintrospection/wintrospection_ext.h"
+//#include "osi_linux/osi_linux_ext.h"
 
 #include "callstack_instr.h"
 
@@ -129,6 +129,7 @@ void verbose_log(const char *msg, TranslationBlock *tb, stackid curStackid,
         bool logReturn) {
     if (verbose) {
         printf("%s:  ", msg);
+#if 0
         if (STACK_HEURISTIC== stack_segregation) {
             // Kernel flag omitted, not required when using stack heuristic.
             printf("asid=0x" TARGET_FMT_lx ", sp=0x" TARGET_FMT_lx,
@@ -139,6 +140,8 @@ void verbose_log(const char *msg, TranslationBlock *tb, stackid curStackid,
                    std::get<0>(curStackid), std::get<1>(curStackid),
                    std::get<2>(curStackid) ? "true" : "false");
         } else {
+#endif
+        if (1) {
             // STACK_ASID
             // Kernel flag omitted, not required when using asid stack type.
             printf("asid=0x" TARGET_FMT_lx, std::get<0>(curStackid));
@@ -155,6 +158,7 @@ void verbose_log(const char *msg, TranslationBlock *tb, stackid curStackid,
 
 // get the stackid when the heuristic stack segregation method is in use
 // assumes stack_segregation is STACK_HEURISTIC
+#if 0
 static stackid get_heuristic_stackid(CPUState* cpu) {
     // why is this part of get_stackid removed from it? to make SonarQube stop
     // complaining about get_stackid having too many return statements without
@@ -207,11 +211,13 @@ static stackid get_heuristic_stackid(CPUState* cpu) {
     }
     return cursi;
 }
+#endif
 
 static stackid get_stackid(CPUState* cpu) {
 
     int in_kernel = panda_in_kernel(cpu);
 
+#if 0
     if (STACK_HEURISTIC == stack_segregation) {
         return get_heuristic_stackid(cpu);
     } else if (STACK_THREADED == stack_segregation) {
@@ -226,6 +232,8 @@ static stackid get_stackid(CPUState* cpu) {
         free_osithread(thr);
         return cursi;
     } else {
+#endif
+    if (1) {
         // STACK_ASID
         target_ulong asid = panda_current_asid(cpu);
         return std::make_tuple(asid, 0, 0);
@@ -374,6 +382,7 @@ void after_block_exec(CPUState* cpu, TranslationBlock *tb, uint8_t exitCode) {
 }
 
 
+#if 0
 /**
  * @brief Fills preallocated buffer \p callers with up to \p n call addresses.
  */
@@ -384,6 +393,7 @@ uint32_t get_callers(target_ulong callers[], uint32_t n, CPUState* cpu) {
     for (uint32_t i=0; i<n; i++) { callers[i] = v[v.size()-1-i].pc; }
     return n;
 }
+#endif
 
 
 #define CALLSTACK_MAX_SIZE 16
@@ -414,6 +424,7 @@ void pandalog_callstack_free(Panda__CallStack *cs) {
 }
 
 
+#if 0
 /**
  * @brief Fills preallocated buffer \p functions with up to \p n function addresses.
  */
@@ -463,7 +474,9 @@ void get_prog_point(CPUState* cpu, prog_point *p) {
 
     p->pc = cpu->panda_guest_pc;
 }
+#endif
 
+#if 0
 // prepare OSI support that is needed for the threaded stack type
 // returns true if set up OK, and false if it was not
 bool setup_osi() {
@@ -487,14 +500,26 @@ bool setup_osi() {
     return false;
 #endif
 }
+#endif
 
 
-bool init_plugin(void *self) {
+
+QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
+                   const qemu_info_t *info, int argc, char **argv) {
+
+    //qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);
+    //return 0;
 
     // get arguments to this plugin
+#if 0
     panda_arg_list *args = panda_get_args("callstack_instr");
     verbose = panda_parse_bool_opt(args, "verbose", "enable verbose output");
+#endif
+    verbose = false;
+    stack_segregation = STACK_ASID;
 
+
+#if 0
     // they really, really want the default stack_type to be threaded if an
     // os is provided
     const char *stackType;
@@ -516,6 +541,7 @@ bool init_plugin(void *self) {
                 stackType);
         return false;
     }
+#endif
 
 #if defined(TARGET_I386) && !defined(TARGET_X86_64)
     if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
@@ -562,6 +588,7 @@ bool init_plugin(void *self) {
     cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
 #endif
 
+#if 0
     panda_cb pcb;
 
     panda_enable_memcb();
@@ -591,10 +618,11 @@ bool init_plugin(void *self) {
     }
 
     return setup_ok;
-}
+#endif
 
-void uninit_plugin(void *self) {
-    // nothing to do
+    // Need to register 3 calblacks: ABT, ABE, BBE (TODO)
+
+    return 0;
 }
 
 /* vim: set tabstop=4 softtabstop=4 expandtab ft=cpp: */
