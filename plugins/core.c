@@ -53,7 +53,7 @@ struct qemu_plugin_ctx *plugin_id_to_ctx_locked(qemu_plugin_id_t id)
     return ctx;
 }
 
-GModule *plugin_name_to_handle(const char* name)
+GModule *qemu_plugin_name_to_handle(const char* name)
 {
       struct qemu_plugin_ctx *ctx;
       QTAILQ_FOREACH(ctx, &plugin.ctxs, entry) {
