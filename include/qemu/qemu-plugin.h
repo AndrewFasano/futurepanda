@@ -344,6 +344,28 @@ size_t qemu_plugin_tb_n_insns(const struct qemu_plugin_tb *tb);
 uint64_t qemu_plugin_tb_vaddr(const struct qemu_plugin_tb *tb);
 
 /**
+ * qemu_plugin_get_pc() - returns current program counter
+ *
+ */
+uint64_t qemu_plugin_get_pc(void);
+
+/**
+ * qemu_plugin_get_reg32() - returns a 32-bit register
+ * @reg_idx: register index
+ * @error: set to true if an error occurs
+ *
+ */
+int32_t qemu_plugin_get_reg32(unsigned int reg_idx, bool* error);
+
+/**
+ * qemu_plugin_get_reg64() - returns a 64-bit register
+ * @reg_idx: register index
+ * @error: set to true if an error occurs
+ *
+ */
+int64_t qemu_plugin_get_reg64(unsigned int reg_idx, bool* error);
+
+/**
  * qemu_plugin_tb_get_insn() - retrieve handle for instruction
  * @tb: opaque handle to TB passed to callback
  * @idx: instruction number, 0 indexed
@@ -589,5 +611,6 @@ void qemu_plugin_outs(const char *string);
  * argument, and false otherwise
  */
 bool qemu_plugin_bool_parse(const char *name, const char *val, bool *ret);
+
 
 #endif /* QEMU_PLUGIN_API_H */
