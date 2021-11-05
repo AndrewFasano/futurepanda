@@ -8,7 +8,7 @@
 #include <gmodule.h>
 #include <assert.h>
 //#include "plugins/plugin.h"
-extern GModule* plugin_name_to_handle(const char*);
+extern GModule* qemu_plugin_name_to_handle(const char*);
 
 /*
 
@@ -39,7 +39,7 @@ extern GModule* plugin_name_to_handle(const char*);
   fn##_t PPP_NAME(plugin, fn); \
   void PPP_SETUP_NAME(plugin, fn) (void); \
   void __attribute__ ((constructor)) PPP_SETUP_NAME(plugin,fn) (void) { \
-      GModule *h = plugin_name_to_handle(#plugin); \
+      GModule *h = qemu_plugin_name_to_handle(#plugin); \
       if (!h) { \
           printf("Error loading plugin " # plugin "\n"); \
       }else if (!g_module_symbol(h, #fn, (gpointer*)& PPP_NAME(plugin, fn) )) { \
@@ -131,7 +131,7 @@ extern int ppp_##cb_name##_num_cb;
     int ppp_cb_ind;                                                           \
     for (ppp_cb_ind = 0; ppp_cb_ind < ppp_##cb_name##_num_cb; ppp_cb_ind++) { \
       if (ppp_##cb_name##_cb[ppp_cb_ind] != NULL) {                           \
-    ppp_##cb_name##_cb[ppp_cb_ind]( __VA_ARGS__ ) ;                           \
+        ppp_##cb_name##_cb[ppp_cb_ind]( __VA_ARGS__ ) ;                        \
       }                                                                       \
     }                                                                         \
   }
@@ -163,7 +163,7 @@ to add a callback to be run inside of plugin A.
 #define PPP_REG_CB(other_plugin, cb_name, cb_func)                                          \
   {                                                                                         \
     dlerror();                                                                              \
-    void *h = plugin_name_to_handle(other_plugin);                                          \
+    void *h = qemu_plugin_name_to_handle(other_plugin);                                          \
     if (!h) {                                                                               \
       printf("In trying to add plugin callback, couldn't load %s plugin\n", other_plugin);  \
       assert (h);                                                                           \

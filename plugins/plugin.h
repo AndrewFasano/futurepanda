@@ -63,7 +63,7 @@ struct qemu_plugin_ctx {
 };
 
 struct qemu_plugin_ctx *plugin_id_to_ctx_locked(qemu_plugin_id_t id);
-GModule *plugin_name_to_handle(const char* name);
+GModule *qemu_plugin_name_to_handle(const char* name);
 
 void plugin_register_inline_op(GArray **arr,
                                enum qemu_plugin_mem_rw rw,
