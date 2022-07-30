@@ -284,7 +284,7 @@ void insert_call(void *func_ptr, int arg_c, ...) {
 uint64_t qemu_plugin_get_pc(void) {
     CPUState *cpu = current_cpu;
     CPUArchState *env = (CPUArchState *)cpu->env_ptr;
-    uint64_t pc, cs_base;
+    target_ulong pc, cs_base;
     uint32_t flags;
     cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
     return pc;
