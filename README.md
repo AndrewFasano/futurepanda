@@ -1,9 +1,9 @@
 Future PANDA
 ----
-An attempt to get some of PANDA built on top of the QEMU6 plugin interface
+A prototype dynamic analysis platform built atop QEMU's plugin interface.
 
-
-Build. You may need ninja-build from apt
+## Build.
+You may need ninja-build from apt
 ```
 git clone ...
 mkdir build
@@ -12,12 +12,16 @@ cd build
 make -j $(nproc)
 ```
 
-Look at the plugins  in `panda/`
+# Run.
+Look at the plugins available in `build/panda/`
 
-Run a plugin, `foo` on a qcow:
+Run a plugin, `ppp_srv` on a qcow:
 ```
-./i386-softmmu/qemu-system-i386 \
-  -plugin ./panda/libfoo.so\
+./build/i386-softmmu/qemu-system-i386 \
+  -plugin ./build/panda/libppp_srv.so\
+ -display none\
+  ~/.panda/ubuntu_1604_x86.qcow
+```
 
 Current status
 ----
