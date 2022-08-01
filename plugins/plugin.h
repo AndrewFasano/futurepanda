@@ -101,4 +101,4 @@ void exec_inline_op(struct qemu_plugin_dyn_cb *cb);
 /* loader.c */
 bool is_plugin_named(struct qemu_plugin_ctx ctx, const char* name);
 
-#endif /* _PLUGIN_INTERNAL_H_ */
+#endif /* PLUGIN_H */
