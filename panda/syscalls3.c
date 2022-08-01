@@ -155,7 +155,7 @@ static void syscall_64(unsigned int cpu_index, void *udata) {
   bool err;
   uint64_t callno = get_callno_fn(&err);
   if (err) {
-    printf("Error reading register\n");
+    fprintf(stderr, "Error reading register\n");
     return;
   }
   uint64_t pc = qemu_plugin_get_pc();

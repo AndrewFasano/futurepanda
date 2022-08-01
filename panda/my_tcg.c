@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <qemu-plugin.h>
+#include <glib.h>
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 
@@ -13,14 +14,20 @@ void my_func(void);
 unsigned long ctr = 0;
 void my_func(void) {
   ctr++;
-  //if (ctr % 0x1000000 == 0)
-    printf("Func called 0x%lx times\n", ctr);
+  g_autoptr(GString) report = g_string_new("Functrion called ");
+  g_string_append_printf(report, "0x%lx times\n", ctr);
+  qemu_plugin_outs(report->str);
+  g_string_free(report, true);
 }
 
 int first = 0;
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb) {
   // Called whenever a block is translated
-  printf("Instrumenting block at: 0x%lx\n", qemu_plugin_tb_vaddr(tb));
+  g_autoptr(GString) report = g_string_new("Instrumenting block at ");
+  g_string_append_printf(report, "0x%lx\n", qemu_plugin_tb_vaddr(tb));
+  qemu_plugin_outs(report->str);
+  g_string_free(report, true);
+
   insert_call(my_func, 1);
 }
 

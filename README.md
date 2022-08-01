@@ -2,6 +2,8 @@ Future PANDA
 ----
 A prototype dynamic analysis platform built atop QEMU's plugin interface.
 
+Status vs upstream: last rebased onto qemu at `v7.1-rc0` (July 2022).
+
 ## Build.
 You may need ninja-build from apt
 ```

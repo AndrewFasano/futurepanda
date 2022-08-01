@@ -13,7 +13,7 @@ PPP_CB_BOILERPLATE(on_exit);
 
 static void plugin_exit(qemu_plugin_id_t id, void *p)
 {
-  printf("ppp_srv exit triggered, running all registered PPP callbacks\n");
+  qemu_plugin_outs("ppp_srv exit triggered, running all registered PPP callbacks\n");
   PPP_RUN_CB(on_exit, 0, true);
 
 }
