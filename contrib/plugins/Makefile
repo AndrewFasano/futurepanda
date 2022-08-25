@@ -23,6 +23,7 @@ NAMES += cache
 NAMES += drcov
 NAMES += syscalls
 NAMES += syscalls_logger
+NAMES += sc_file_log
 
 SONAMES := $(addsuffix .so,$(addprefix lib,$(NAMES)))
 
