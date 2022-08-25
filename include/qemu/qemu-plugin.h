@@ -390,6 +390,16 @@ bool qemu_plugin_run_callback(qemu_plugin_id_t id, const char *name, gpointer ev
 bool qemu_plugin_reg_callback(const char *target_plugin, const char *cb_name, cb_func_t function_pointer);
 
 /**
+ * qemu_plugin_read_guest_virt_mem() - Read a buffer of guest memory
+ * @gva: Guest virtual address
+ * @buf: Buffer to copy guest memory into
+ * @length: Size of buf
+ *
+ * Returns: True if the memory was successfully copied into buf
+ */
+bool qemu_plugin_read_guest_virt_mem(uint64_t gva, char* buf, size_t length);
+
+/**
  * qemu_plugin_tb_get_insn() - retrieve handle for instruction
  * @tb: opaque handle to TB passed to callback
  * @idx: instruction number, 0 indexed
