@@ -21,6 +21,8 @@ NAMES += lockstep
 NAMES += hwprofile
 NAMES += cache
 NAMES += drcov
+NAMES += qpp_srv
+NAMES += qpp_client
 
 SONAMES := $(addsuffix .so,$(addprefix lib,$(NAMES)))
 
@@ -34,7 +36,7 @@ CFLAGS += -I$(SRC_PATH)/include/qemu
 all: $(SONAMES)
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -DCURRENT_PLUGIN=\"$(basename $@)\" -c -o $@ $<
 
 lib%.so: %.o
 	$(CC) -shared -Wl,-soname,$@ -o $@ $^ $(LDLIBS)
