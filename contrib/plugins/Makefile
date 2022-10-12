@@ -21,6 +21,10 @@ NAMES += lockstep
 NAMES += hwprofile
 NAMES += cache
 NAMES += drcov
+NAMES += syscalls
+NAMES += syscalls_logger
+NAMES += sc_file_log
+NAMES += stringsearch
 
 SONAMES := $(addsuffix .so,$(addprefix lib,$(NAMES)))
 
@@ -32,7 +36,31 @@ CFLAGS += $(if $(findstring no-psabi,$(QEMU_CFLAGS)),-Wpsabi)
 CFLAGS += $(if $(CONFIG_DEBUG_TCG), -ggdb -O0)
 CFLAGS += -I$(SRC_PATH)/include/qemu
 
+CPPFLAGS = $(GLIB_CFLAGS)
+CPPFLAGS += -fPIC -Wall
+CPPFLAGS += $(if $(findstring no-psabi,$(QEMU_CFLAGS)),-Wpsabi)
+CPPFLAGS += -idirafter $(SRC_PATH)/include/qemu
+
 all: $(SONAMES)
+
+
+libstringsearch.so: stringsearch.o
+	$(CC) -shared -Wl,-soname,$@ -o $@ $^ $(LDLIBS)
+
+stringsearch.o: stringsearch.cpp
+	g++  $(CPPFLAGS) -DCURRENT_PLUGIN=\"stringsearch\" -c -o stringsearch.o $<
+
+libosi_linux.so: osi_linux.o default_profile.o kernelinfo_read.o
+	$(CC) -shared -Wl,-soname,$@ -o $@ $^ $(LDLIBS)
+
+osi_linux.o: osi_linux/osi_linux.cpp
+	$(CC) $(CPPFLAGS) -DCURRENT_PLUGIN=\"osi_linux\" -c -o $@ $<
+
+default_profile.o: osi_linux/default_profile.cpp
+	$(CC) $(CPPFLAGS) -DCURRENT_PLUGIN=\"osi_linux\" -c -o $@ $<
+
+kernelinfo_read.o: osi_linux/utils/kernelinfo/kernelinfo_read.c osi_linux/utils/kernelinfo/kernelinfo.h
+	$(CC) $(CPPFLAGS) -DCURRENT_PLUGIN=\"osi_linux\" -c -o $@ $<
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
