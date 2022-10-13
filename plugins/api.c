@@ -228,15 +228,27 @@ bool qemu_plugin_read_guest_virt_mem(uint64_t gva, char* buf, size_t length) {
   return false;
 #else
     // Convert virtual address to physical, then read it
-    CPUState *cpu = current_cpu;
+    //CPUState *cpu = current_cpu;
+
+    if (cpu_memory_rw_debug(current_cpu, (vaddr)gva,(void*) buf, length, 0) == -1)
+      return true;
+    return false;
+
+#if 0
+    assert(TARGET_PAGE_MASK != 0); // This is fine
     uint64_t page = gva & TARGET_PAGE_MASK;
+    printf("GVA %lx -> page %lx\n", gva, gva & TARGET_PAGE_MASK);
     hwaddr gpa = cpu_get_phys_page_debug(cpu, page);
     if (gpa == (hwaddr)-1) {
+        printf("ERROR failed to map %lx -> page %lx to GPA\n", gva, page);
         return false;
     }
 
+    printf("GVA %lx -> v_page %lx -> p_page %lx -> GPA %lx\n", gva, page, gpa, gva + (gva & ~TARGET_PAGE_MASK));
+
     gpa += (gva & ~TARGET_PAGE_MASK);
     cpu_physical_memory_rw(gpa, buf, length, false);
+#endif
     return true;
 #endif
 }
