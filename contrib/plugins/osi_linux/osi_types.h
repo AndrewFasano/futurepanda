@@ -33,8 +33,11 @@ typedef uint64_t target_ulong; // This is iffy?
 // Stupid panda shim
 static int panda_virtual_memory_rw(target_ulong addr,
                                           uint8_t *buf, int len, bool is_write) {
- assert(is_write == 0);
- return qemu_plugin_read_guest_virt_mem((uint64_t)addr, (char*)buf, len);
+  assert(is_write == 0);
+  if (qemu_plugin_read_guest_virt_mem((uint64_t)addr, (char*)buf, len) == false) {
+    return -1;
+  }
+  return 0;
 }
 
 
