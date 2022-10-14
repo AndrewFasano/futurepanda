@@ -652,17 +652,7 @@ void init_per_cpu_offsets() {
 
     // skip update because of failure to read from per_cpu_offsets_addr
     // BUG: This read is failing - why?
-    target_ptr_t per_cpu_offset_0_addr = 0;
-
-    target_ptr_t tmp;
-    if (qemu_plugin_read_guest_virt_mem((uint64_t)ki.task.per_cpu_offsets_addr, (char*)&tmp,
-                                        sizeof(tmp) == -1)) {
-
-      printf("Read from %lx failed! Fatal!\n", ki.task.per_cpu_offsets_addr);
-    }
-
-    printf("\n\n----Try to read from addr: %lx\n", ki.task.per_cpu_offsets_addr);
-
+    target_ptr_t per_cpu_offset_0_addr = -1;
     auto r = struct_get(&per_cpu_offset_0_addr, ki.task.per_cpu_offsets_addr,
                         0*sizeof(target_ptr_t));
     if (r != struct_get_ret_t::SUCCESS) {
@@ -675,7 +665,7 @@ void init_per_cpu_offsets() {
     //LOG_INFO("Updated value for ki.task.per_cpu_offset_0_addr: "
     //         TARGET_PTR_FMT "\n", per_cpu_offset_0_addr);
 
-    printf("BUG: %lx -> %lx (%d bytes)\n", ki.task.per_cpu_offsets_addr, ki.task.per_cpu_offset_0_addr, sizeof(ki.task.per_cpu_offset_0_addr));
+    printf("BUG: %lx -> %lx\n", ki.task.per_cpu_offsets_addr, ki.task.per_cpu_offset_0_addr);
 }
 
 /**

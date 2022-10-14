@@ -223,34 +223,15 @@ uint64_t qemu_plugin_get_pc(void) {
     return (uint64_t)pc;
 }
 
-bool qemu_plugin_read_guest_virt_mem(uint64_t gva, char* buf, size_t length) {
+int qemu_plugin_read_guest_virt_mem(uint64_t gva, void* buf, size_t length) {
 #ifdef CONFIG_USER_ONLY
-  return false;
-#else
-    // Convert virtual address to physical, then read it
-    //CPUState *cpu = current_cpu;
-
-    if (cpu_memory_rw_debug(current_cpu, (vaddr)gva,(void*) buf, length, 0) == -1)
-      return true;
-    return false;
-
-#if 0
-    assert(TARGET_PAGE_MASK != 0); // This is fine
-    uint64_t page = gva & TARGET_PAGE_MASK;
-    printf("GVA %lx -> page %lx\n", gva, gva & TARGET_PAGE_MASK);
-    hwaddr gpa = cpu_get_phys_page_debug(cpu, page);
-    if (gpa == (hwaddr)-1) {
-        printf("ERROR failed to map %lx -> page %lx to GPA\n", gva, page);
-        return false;
-    }
-
-    printf("GVA %lx -> v_page %lx -> p_page %lx -> GPA %lx\n", gva, page, gpa, gva + (gva & ~TARGET_PAGE_MASK));
-
-    gpa += (gva & ~TARGET_PAGE_MASK);
-    cpu_physical_memory_rw(gpa, buf, length, false);
+  return -1;
 #endif
-    return true;
-#endif
+    // DEBUG
+    int rv=cpu_memory_rw_debug(current_cpu, (vaddr)gva,(void*) buf, length, 0);
+    printf("READ %ld bytes from %lx. Result: %d\n", length, gva, rv);
+    return rv;
+    //return cpu_memory_rw_debug(current_cpu, (vaddr)gva, buf, length, 0);
 }
 
 int32_t qemu_plugin_get_reg32(unsigned int reg_idx, bool* error) {
