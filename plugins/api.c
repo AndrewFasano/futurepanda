@@ -404,6 +404,21 @@ bool qemu_plugin_bool_parse(const char *name, const char *value, bool *ret)
  * QPP: inter-plugin function resolution and callbacks
  */
 
+gpointer qemu_plugin_import_function(const char *plugin, const char *function) {
+    if (!qpp_enabled_check(plugin))
+        return NULL;
+    gpointer function_pointer = NULL;
+    GModule *plugin_handle = qemu_plugin_name_to_handle(plugin);
+    // resolve symbol to a pointer
+    if (g_module_symbol(plugin_handle, function, (gpointer *)&function_pointer)) {
+        return function_pointer;
+    }
+
+    error_report("function: %s not found in plugin: %s\n", function, plugin);
+    abort();
+    return NULL;
+}
+
 int qemu_plugin_create_callback(qemu_plugin_id_t id, const char *name) {
     const char *plugin = id_to_plugin_name(id);
     if (!plugin) {
