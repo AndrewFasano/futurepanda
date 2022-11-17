@@ -53,6 +53,17 @@ struct qemu_plugin_ctx *plugin_id_to_ctx_locked(qemu_plugin_id_t id)
     return ctx;
 }
 
+struct qemu_plugin_ctx *plugin_name_to_ctx_locked(const char* name)
+{
+    struct qemu_plugin_ctx *ctx;
+    QTAILQ_FOREACH(ctx, &plugin.ctxs, entry) {
+        if (strcmp(ctx->name, name) == 0)
+            return plugin_id_to_ctx_locked(ctx->id)->handle;
+        }
+    }
+    return NULL;
+}
+
 static void plugin_cpu_update__async(CPUState *cpu, run_on_cpu_data data)
 {
     bitmap_copy(cpu->plugin_mask, &data.host_ulong, QEMU_PLUGIN_EV_MAX);
@@ -236,26 +247,6 @@ void qemu_plugin_vcpu_exit_hook(CPUState *cpu)
     qemu_rec_mutex_unlock(&plugin.lock);
 }
 
-GModule *qemu_plugin_name_to_handle(const char* name)
-{
-    struct qemu_plugin_ctx *ctx;
-    QTAILQ_FOREACH(ctx, &plugin.ctxs, entry) {
-        if (strcmp(ctx->name, name) == 0)
-            return plugin_id_to_ctx_locked(ctx->id)->handle;
-        }
-    }
-    return NULL;
-}
-
-int name_to_plugin_version(const char *name) {
-    struct qemu_plugin_ctx *ctx;
-    QTAILQ_FOREACH(ctx, &plugin.ctxs, entry) {
-        if (strcmp(ctx->name, name) == 0)
-            return ctx->version;
-    }
-    warn_report("Could not find any plugin named %s.\n", name);
-    return -1;
-}
 const char *id_to_plugin_name(qemu_plugin_id_t id) {
     const char *plugin = plugin_id_to_ctx_locked(id)->name;
     if (plugin)
@@ -265,11 +256,11 @@ const char *id_to_plugin_name(qemu_plugin_id_t id) {
         return NULL;
     }
 
-struct qemu_plugin_qpp_cb *qemu_plugin_match_cb_name(const char *plugin_name, const char *name) {
+struct qemu_plugin_qpp_cb *plugin_find_qpp_cb(qemu_plugin_ctx *plugin_ctx, const char *cb_name) {
     // iterate through structs to see if one already has name
     struct qemu_plugin_qpp_cb *cb;
     QTAILQ_FOREACH(cb, &plugin.qpp_cbs, entry) {
-        if ((strcmp(cb->name, name) == 0) && (strcmp(cb->plugin, plugin_name) == 0))
+        if ((strcmp(cb->name, cb_name) == 0) && (strcmp(cb->plugin, plugin_ctx->plugin_name) == 0))
             return cb;
     }
     return NULL;

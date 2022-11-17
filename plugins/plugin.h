@@ -77,6 +77,8 @@ struct qemu_plugin_ctx {
 
 struct qemu_plugin_ctx *plugin_id_to_ctx_locked(qemu_plugin_id_t id);
 
+struct qemu_plugin_ctx *plugin_name_to_ctx_locked(const char* name);
+
 void plugin_register_inline_op(GArray **arr,
                                enum qemu_plugin_mem_rw rw,
                                enum qemu_plugin_op op, void *ptr,
@@ -114,9 +116,7 @@ int name_to_plugin_version(const char *name);
 
 const char *id_to_plugin_name(qemu_plugin_id_t id);
 
-GModule *qemu_plugin_name_to_handle(const char* name);
-
-struct qemu_plugin_qpp_cb *qemu_plugin_match_cb_name(const char *plugin_name, const char *name);
+struct qemu_plugin_qpp_cb *plugin_find_qpp_cb(qemu_plugin_ctx *plugin_ctx, const char *cb_name);
 
 /* loader.c */
 void plugin_add_qpp_cb(const char *plugin_name, const char *name);
