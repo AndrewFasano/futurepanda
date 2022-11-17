@@ -114,6 +114,8 @@ int name_to_plugin_version(const char *name);
 
 const char *id_to_plugin_name(qemu_plugin_id_t id);
 
+GModule *qemu_plugin_name_to_handle(const char* name);
+
 struct qemu_plugin_qpp_cb *qemu_plugin_match_cb_name(const char *plugin_name, const char *name);
 
 /* loader.c */

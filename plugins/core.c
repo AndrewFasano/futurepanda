@@ -236,6 +236,17 @@ void qemu_plugin_vcpu_exit_hook(CPUState *cpu)
     qemu_rec_mutex_unlock(&plugin.lock);
 }
 
+GModule *qemu_plugin_name_to_handle(const char* name)
+{
+    struct qemu_plugin_ctx *ctx;
+    QTAILQ_FOREACH(ctx, &plugin.ctxs, entry) {
+        if (strcmp(ctx->name, name) == 0)
+            return plugin_id_to_ctx_locked(ctx->id)->handle;
+        }
+    }
+    return NULL;
+}
+
 int name_to_plugin_version(const char *name) {
     struct qemu_plugin_ctx *ctx;
     QTAILQ_FOREACH(ctx, &plugin.ctxs, entry) {
