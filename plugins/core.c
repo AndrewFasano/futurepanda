@@ -591,6 +591,7 @@ static void __attribute__((__constructor__)) plugin_init(void)
     plugin.id_ht = g_hash_table_new(g_int64_hash, g_int64_equal);
     plugin.cpu_ht = g_hash_table_new(g_int_hash, g_int_equal);
     QTAILQ_INIT(&plugin.ctxs);
+    QTAILQ_INIT(&plugin.qpp_cbs);
     qht_init(&plugin.dyn_cb_arr_ht, plugin_dyn_cb_arr_cmp, 16,
              QHT_MODE_AUTO_RESIZE);
     atexit(qemu_plugin_atexit_cb);

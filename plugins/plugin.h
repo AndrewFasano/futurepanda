@@ -21,6 +21,7 @@
 struct qemu_plugin_state {
     QTAILQ_HEAD(, qemu_plugin_ctx) ctxs;
     QLIST_HEAD(, qemu_plugin_cb) cb_lists[QEMU_PLUGIN_EV_MAX];
+    QTAILQ_HEAD(, qemu_plugin_qpp_cb) qpp_cbs;
     /*
      * Use the HT as a hash map by inserting k == v, which saves memory as
      * documented by GLib. The parent struct is obtained with container_of().
@@ -46,6 +47,15 @@ struct qemu_plugin_state {
     struct qht dyn_cb_arr_ht;
 };
 
+typedef void (*cb_func_t) (gpointer evdata, gpointer udata);
+
+struct qemu_plugin_qpp_cb {
+    const char *plugin;
+    const char *name;
+    cb_func_t registered_cb_funcs[32];
+    int counter;
+    QTAILQ_ENTRY(qemu_plugin_qpp_cb) entry;
+};
 
 struct qemu_plugin_ctx {
     GModule *handle;
@@ -53,6 +63,7 @@ struct qemu_plugin_ctx {
     const char *name;
     int version;
     struct qemu_plugin_cb *callbacks[QEMU_PLUGIN_EV_MAX];
+    struct qemu_plugin_qpp_cb *qpp_callbacks;
     QTAILQ_ENTRY(qemu_plugin_ctx) entry;
     /*
      * keep a reference to @desc until uninstall, so that plugins do not have
@@ -102,5 +113,8 @@ void exec_inline_op(struct qemu_plugin_dyn_cb *cb);
 int name_to_plugin_version(const char *name);
 
 const char *id_to_plugin_name(qemu_plugin_id_t id);
+
+/* loader.c */
+void plugin_add_qpp_cb(const char *plugin_name, const char *name);
 
 #endif /* PLUGIN_H */

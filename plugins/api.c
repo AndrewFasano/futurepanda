@@ -401,6 +401,77 @@ bool qemu_plugin_bool_parse(const char *name, const char *value, bool *ret)
 }
 
 /*
+ * QPP: inter-plugin function resolution and callbacks
+ */
+
+int qemu_plugin_create_callback(qemu_plugin_id_t id, const char *name) {
+    const char *plugin = id_to_plugin_name(id);
+    if (!plugin) {
+        error_report("CREATE CB ERR\n");
+        return 1;
+    }
+    // iterate through structs to see if one already has name
+    if (qemu_plugin_match_cb_name(plugin, name)) {
+        error_report("CREATE CB ERR 2\n");
+        return 1;
+    }
+
+    // if not, initialize it
+    plugin_add_qpp_cb(plugin, name);
+    return 0;
+}
+
+int qemu_plugin_run_callback(qemu_plugin_id_t id, const char *name, gpointer evdata, gpointer udata) {
+    const char *plugin = id_to_plugin_name(id);
+    if (!plugin) {
+        error_report("RUN CB ERR\n");
+        return 1;
+    }
+    // find callback with name
+    struct qemu_plugin_qpp_cb *cb = qemu_plugin_match_cb_name(plugin, name);
+    if (!cb) {
+        error_report("RUN CB ERR 2\n");
+        return 1;
+    }
+    // run all functions in list with args evdata and udata
+    int i = 0;
+    for (; i < 32; i++) {
+        if (cb->registered_cb_funcs[i]) {
+            cb_func_t qpp_cb_func = cb->registered_cb_funcs[i];
+            qpp_cb_func(evdata, udata);
+        }
+        else
+            break;
+    }
+    if (i == 0)
+        return 1;
+    return 0;
+}
+
+int qemu_plugin_reg_callback(qemu_plugin_id_t id, const char *name, cb_func_t function_pointer) {
+    const char *plugin = id_to_plugin_name(id);
+    if (!plugin) {
+        error_report("REG CB ERR\n");
+        return 1;
+    }
+    // find callback with name
+    struct qemu_plugin_qpp_cb *cb = qemu_plugin_match_cb_name(plugin, name);
+    if (!cb) {
+        error_report("REG CB ERR 2\n");
+        return 1;
+    }
+    // append function pointer to list of functions
+    for (int i = 0; i < 32; i++) {
+        if (!(cb->registered_cb_funcs[i])) {
+            cb->registered_cb_funcs[i] = function_pointer;
+            return 0;
+        }
+    }
+    error_report("REG CB ERR 3\n");
+    return 1;
+}
+
+/*
  * Binary path, start and end locations
  */
 const char *qemu_plugin_path_to_binary(void)

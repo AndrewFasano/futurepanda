@@ -14,6 +14,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <gmodule.h>
 
 /*
  * For best performance, build the plugin with -fvisibility=hidden so that
@@ -37,6 +38,8 @@
  * typedef qemu_plugin_id_t - Unique plugin ID
  */
 typedef uint64_t qemu_plugin_id_t;
+
+typedef void (*cb_func_t) (gpointer evdata, gpointer udata);
 
 /*
  * Versioning plugins:
@@ -343,6 +346,36 @@ size_t qemu_plugin_tb_n_insns(const struct qemu_plugin_tb *tb);
  * Returns: virtual address of block start
  */
 uint64_t qemu_plugin_tb_vaddr(const struct qemu_plugin_tb *tb);
+
+/**
+* qemu_plugin_create_callback() - create a new cb with given name
+* @id: unique plugin id
+* @name: name of cb
+*
+* Returns: 0 on success, 1 on failure
+*/
+int qemu_plugin_create_callback(qemu_plugin_id_t id, const char *name);
+
+/**
+* qemu_plugin_run_callback() - run all functions registered to cb with given name using given args
+* @id: unique plugin id
+* @name: name of cb
+* @evdata: pointer to evdata struct
+* @udata: pointer to udata struct
+*
+* Returns: 0 on success, 1 on failure
+*/
+int qemu_plugin_run_callback(qemu_plugin_id_t id, const char *name, gpointer evdata, gpointer udata);
+
+/**
+* qemu_plugin_reg_callback() - register a function to be called on cb with given name
+* @id: unique plugin id
+* @name: name of cb
+* @function_pointer: pointer to function being registered
+*
+* Returns: 0 on success, 1 on failure
+*/
+int qemu_plugin_reg_callback(qemu_plugin_id_t id, const char *name, cb_func_t function_pointer);
 
 /**
  * qemu_plugin_tb_get_insn() - retrieve handle for instruction
