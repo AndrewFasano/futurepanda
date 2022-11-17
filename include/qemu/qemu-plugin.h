@@ -378,13 +378,13 @@ int qemu_plugin_run_callback(qemu_plugin_id_t id, const char *name, gpointer evd
 
 /**
 * qemu_plugin_reg_callback() - register a function to be called on cb with given name
-* @id: unique plugin id
-* @name: name of cb
+* @target_plugin: name of plugin that provides the callback
+* @cb_name: name of the callback
 * @function_pointer: pointer to function being registered
 *
 * Returns: 0 on success, 1 on failure
 */
-int qemu_plugin_reg_callback(qemu_plugin_id_t id, const char *name, cb_func_t function_pointer);
+int qemu_plugin_reg_callback(const char *target_plugin, const char *cb_name, cb_func_t function_pointer);
 
 /**
  * qemu_plugin_tb_get_insn() - retrieve handle for instruction

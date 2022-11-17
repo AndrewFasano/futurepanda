@@ -116,7 +116,9 @@ int name_to_plugin_version(const char *name);
 
 const char *id_to_plugin_name(qemu_plugin_id_t id);
 
-struct qemu_plugin_qpp_cb *plugin_find_qpp_cb(qemu_plugin_ctx *plugin_ctx, const char *cb_name);
+struct qemu_plugin_qpp_cb *qemu_plugin_match_cb_name(const char *plugin_name, const char *name);
+
+struct qemu_plugin_qpp_cb *plugin_find_qpp_cb(struct qemu_plugin_ctx *plugin_ctx, const char *cb_name);
 
 /* loader.c */
 void plugin_add_qpp_cb(const char *plugin_name, const char *name);

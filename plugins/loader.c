@@ -297,7 +297,6 @@ void plugin_add_qpp_cb(const char *plugin_name, const char *name) {
     qemu_rec_mutex_lock(&plugin.lock);
     QTAILQ_INSERT_TAIL(&plugin.qpp_cbs, new_cb, entry);
     qemu_rec_mutex_unlock(&plugin.lock);
-    return rc;
 }
 
 /* call after having removed @desc from the list */
