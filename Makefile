@@ -167,6 +167,12 @@ ifneq ($(filter $(ninja-targets), $(ninja-cmd-goals)),)
 endif
 endif
 
+.PHONY: panda
+panda:
+	$(call quiet-command,\
+		$(MAKE) $(SUBDIR_MAKEFLAGS) -C panda/core V="$(V)", \
+		"BUILD", "PANDA")
+
 ifeq ($(CONFIG_PLUGIN),y)
 .PHONY: plugins
 plugins:
