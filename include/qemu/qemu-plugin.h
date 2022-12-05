@@ -351,6 +351,45 @@ size_t qemu_plugin_tb_n_insns(const struct qemu_plugin_tb *tb);
 uint64_t qemu_plugin_tb_vaddr(const struct qemu_plugin_tb *tb);
 
 /**
+* qemu_plugin_import_function() - return pointer to a function in another plugin
+* @plugin: plugin name
+* @function: function name
+*
+* Returns: NULL on failure, function pointer on success
+*/
+gpointer qemu_plugin_import_function(const char *plugin, const char *function);
+
+/**
+* qemu_plugin_create_callback() - create a new cb with given name
+* @id: unique plugin id
+* @name: name of cb
+*
+* Returns: true on success, false otherwise
+*/
+bool qemu_plugin_create_callback(qemu_plugin_id_t id, const char *name);
+
+/**
+* qemu_plugin_run_callback() - run all functions registered to cb with given name using given args
+* @id: unique plugin id
+* @name: name of cb
+* @evdata: pointer to evdata struct
+* @udata: pointer to udata struct
+*
+* Returns: true if any registerd functions were run, false otherwise
+*/
+bool qemu_plugin_run_callback(qemu_plugin_id_t id, const char *name, gpointer evdata, gpointer udata);
+
+/**
+* qemu_plugin_reg_callback() - register a function to be called on cb with given name
+* @target_plugin: name of plugin that provides the callback
+* @cb_name: name of the callback
+* @function_pointer: pointer to function being registered
+*
+* Returns: true if function was registered successfully, false otherwise
+*/
+bool qemu_plugin_reg_callback(const char *target_plugin, const char *cb_name, cb_func_t function_pointer);
+
+/**
  * qemu_plugin_tb_get_insn() - retrieve handle for instruction
  * @tb: opaque handle to TB passed to callback
  * @idx: instruction number, 0 indexed
