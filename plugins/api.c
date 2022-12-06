@@ -597,7 +597,7 @@ bool qemu_plugin_reg_callback(const char *target_plugin, const char *cb_name,
     return false;
 }
 
-bool qemu_plugin_remove_callback(const char *target_plugin, const char *cb_name,
+bool qemu_plugin_unreg_callback(const char *target_plugin, const char *cb_name,
                               cb_func_t function_pointer) {
     struct qemu_plugin_ctx *ctx = plugin_name_to_ctx_locked(target_plugin);
     if (ctx == NULL) {
