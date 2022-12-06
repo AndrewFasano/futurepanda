@@ -50,6 +50,7 @@
   qemu_plugin_tb_n_insns;
   qemu_plugin_tb_vaddr;
   qemu_plugin_uninstall;
+  qemu_plugin_unreg_callback;
   qemu_plugin_vcpu_for_each;
   qemu_plugin_virt_to_host;
   qemu_plugin_virt_to_phys;
