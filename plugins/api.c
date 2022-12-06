@@ -597,6 +597,38 @@ bool qemu_plugin_reg_callback(const char *target_plugin, const char *cb_name,
     return false;
 }
 
+bool qemu_plugin_remove_callback(const char *target_plugin, const char *cb_name,
+                              cb_func_t function_pointer) {
+    struct qemu_plugin_ctx *ctx = plugin_name_to_ctx_locked(target_plugin);
+    if (ctx == NULL) {
+      error_report("Cannot remove callback function from unknown plugin %s",
+                   target_plugin);
+      return false;
+    }
+    // find callback with name
+    struct qemu_plugin_qpp_cb *cb = plugin_find_qpp_cb(ctx, cb_name);
+    if (!cb) {
+        error_report("Cannot remove a function to run on callback %s in "
+                     "plugin %s as that callback does not exist\n",
+                     cb_name, target_plugin);
+        return false;
+    }
+    // remove function pointer from list of functions and shift all others accordingly
+    for (int i = 0; i < 32; i++) {
+        if (cb->registered_cb_funcs[i] == function_pointer) {
+            for (int j = i + 1; j < 32 && cb->registered_cb_funcs[j]; j++) {
+                cb->registered_cb_funcs[i] = cb->registered_cb_funcs[j];
+                i++;
+            }
+            cb->registered_cb_funcs[i] = NULL;
+        }
+    }
+    error_report("Function to remove not found in registered functions "
+                 "for callback %s in plugin %s\n",
+                 cb_name, target_plugin);
+    return false;
+}
+
 /*
  * Binary path, start and end locations
  */
