@@ -34,6 +34,17 @@ QEMU_PLUGIN_EXPORT OsiProcHandle *get_current_process_handle(void) {
     return h;
 }
 
+QEMU_PLUGIN_EXPORT GArray *get_mappings(OsiProc *p) {
+    GArray *m = NULL; // output
+    struct get_mappings_data* evdata = (struct get_mappings_data*)malloc(sizeof(struct get_mappings_data));
+    evdata->out = &m;
+    evdata->p = p;
+
+    qemu_plugin_run_callback(self_id, "on_get_mappings", evdata, NULL);
+    return m;
+}
+
+
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                    const qemu_info_t *info, int argc, char **argv) {
     self_id = id;
@@ -41,6 +52,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
     qemu_plugin_create_callback(id, "on_get_current_process");
     qemu_plugin_create_callback(id, "on_get_process");
     qemu_plugin_create_callback(id, "on_get_current_process_handle");
+    qemu_plugin_create_callback(id, "on_get_mappings");
     qemu_plugin_create_callback(id, "on_task_change");
     return 0;
 }

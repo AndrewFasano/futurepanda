@@ -34,7 +34,7 @@ void on_get_current_process(gpointer evdata, gpointer udata);
 // Not yet using these
 //void on_get_process_handles(GArray **out);
 //void on_get_processes(GArray **out);
-//void on_get_mappings(OsiProc *p, GArray **out);
+void on_get_mappings(OsiProc *p, GArray **out);
 //void on_get_current_thread(OsiThread *t);
 
 void init_per_cpu_offsets();
@@ -422,8 +422,10 @@ void on_get_process(gpointer evdata, gpointer udata) {
  *
  * @todo Remove duplicates from results.
  */
-/*
-void on_get_mappings(OsiProc *p, GArray **out) {
+void on_get_mappings(gpointer evdata, gpointer udata) {
+    struct get_mappings_data *data = (struct get_mappings_data*)(evdata);
+    GArray **out = data->out;
+    OsiProc *p = data->p;
     if (!osi_guest_is_ready((void**)out)) return;
 
     OsiModule m;
@@ -455,7 +457,6 @@ error0:
     *out = NULL;
     return;
 }
-*/
 
 
 
