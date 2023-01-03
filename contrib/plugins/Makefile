@@ -37,11 +37,13 @@ CFLAGS += -fPIC -Wall $(filter -W%, $(QEMU_CFLAGS))
 CFLAGS += $(if $(findstring no-psabi,$(QEMU_CFLAGS)),-Wpsabi)
 CFLAGS += $(if $(CONFIG_DEBUG_TCG), -ggdb -O0)
 CFLAGS += -I$(SRC_PATH)/include/qemu
+CFLAGS += -g
 
 CPPFLAGS = $(GLIB_CFLAGS)
 CPPFLAGS += -fPIC -Wall
 CPPFLAGS += $(if $(findstring no-psabi,$(QEMU_CFLAGS)),-Wpsabi)
 CPPFLAGS += -idirafter $(SRC_PATH)/include/qemu
+CPPFLAGS += -g
 
 all: $(SONAMES)
 
