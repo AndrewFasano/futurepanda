@@ -18,6 +18,7 @@ NAMES += execlog
 NAMES += hotblocks
 NAMES += hotpages
 NAMES += howvec
+NAMES += hw_proc_id
 NAMES += lockstep
 NAMES += hwprofile
 NAMES += cache
@@ -52,19 +53,22 @@ libstringsearch.so: stringsearch.o
 	$(CC) -shared -Wl,-soname,$@ -o $@ $^ $(LDLIBS)
 
 stringsearch.o: stringsearch.cpp
-	g++  $(CPPFLAGS) -DCURRENT_PLUGIN=\"stringsearch\" -c -o stringsearch.o $<
+	g++  $(CPPFLAGS) -c -o stringsearch.o $<
 
-libosi_linux.so: osi_linux.o default_profile.o kernelinfo_read.o
+libosi_linux.so: osi_linux.o kernelinfo_read.o
 	$(CC) -shared -Wl,-soname,$@ -o $@ $^ $(LDLIBS)
 
 osi_linux.o: osi_linux/osi_linux.cpp osi_linux/osi_linux.h  osi_linux/osi_types.h 
-	$(CC) $(CPPFLAGS) -DCURRENT_PLUGIN=\"osi_linux\" -c -o $@ $<
+	$(CC) $(CPPFLAGS) -c -o $@ $<
 
-default_profile.o: osi_linux/default_profile.cpp  osi_linux/osi_linux.h  osi_linux/osi_types.h 
-	$(CC) $(CPPFLAGS) -DCURRENT_PLUGIN=\"osi_linux\" -c -o $@ $<
+#default_profile.o: osi_linux/default_profile.cpp  osi_linux/osi_linux.h  osi_linux/osi_types.h 
+#	$(CC) $(CPPFLAGS) -c -o $@ $<
 
 kernelinfo_read.o: osi_linux/utils/kernelinfo/kernelinfo_read.c osi_linux/utils/kernelinfo/kernelinfo.h  osi_linux/osi_linux.h  osi_linux/osi_types.h 
-	$(CC) $(CPPFLAGS) -DCURRENT_PLUGIN=\"osi_linux\" -c -o $@ $<
+	$(CC) $(CPPFLAGS) -c -o $@ $<
+
+hw_proc_id.o: hw_proc_id.cpp
+	$(CC) $(CPPFLAGS) -c -o $@ $<
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
