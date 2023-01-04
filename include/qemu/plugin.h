@@ -268,7 +268,7 @@ static inline void qemu_plugin_vcpu_init_hook(CPUState *cpu)
 static inline void qemu_plugin_vcpu_exit_hook(CPUState *cpu)
 { }
 
-static inline void qemu_plugin_tlb_flush_cb(CPUState *cpu)
+static inline void qemu_plugin_vcpu_tlb_flush_cb(CPUState *cpu)
 { }
 
 
