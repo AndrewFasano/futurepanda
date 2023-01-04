@@ -2,22 +2,40 @@
 #include "default_profile.h"
 #include "osi_types.h"
 
+extern "C" {
+#include <qemu-plugin.h>
+QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
+QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "osi_linux_default";
+#include "../hw_proc_id.h"
+//uint64_t hw_proc_id_get_qpp(void);
+}
+
 /**
  * @brief Retrieves the task_struct address using per cpu information.
  */
-target_ptr_t default_get_current_task_struct(void)
+target_ptr_t default_get_current_task_struct(char* target_name)
 {
     struct_get_ret_t err;
     target_ptr_t current_task_addr;
     target_ptr_t ts;
-    current_task_addr = ki.task.current_task_addr;
+
+    if (strcmp(target_name, "x86_64") == 0) {
+      current_task_addr = ki.task.current_task_addr;
+    } else if (strcmp(target_name, "mipsel") == 0) {
+      // __current_thread_info is stored in KERNEL r28
+      // userspace clobbers it but kernel restores (somewhow?)
+      // First field of struct is task - no offset needed
+      current_task_addr = hw_proc_id_get_qpp(); // HWID returned by hw_proc_id is the cached r28 value
+    } else {
+      printf("ERROR: Unsupported target\n");
+      assert(0);
+    }
     err = struct_get(&ts, current_task_addr, ki.task.per_cpu_offset_0_addr);
     //assert(err == struct_get_ret_t::SUCCESS && "failed to get current task struct");
     if (err != struct_get_ret_t::SUCCESS) {
       // Callers need to check if we return NULL!
       return 0;
     }
-
     fixupendian(ts);
     return ts;
 }
