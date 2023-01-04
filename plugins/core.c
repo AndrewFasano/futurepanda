@@ -163,6 +163,26 @@ static void plugin_cb__udata(enum qemu_plugin_event ev)
     }
 }
 
+/*
+ * Disable CFI checks.
+ * The callback function has been loaded from an external library so we do not
+ * have type information
+ */
+QEMU_DISABLE_CFI
+static void plugin_vcpu_cb__syscall(enum qemu_plugin_event ev, CPUState *cpu, int64_t num, uint64_t a1,
+                         uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5,
+                         uint64_t a6, uint64_t a7, uint64_t a8) {
+
+    struct qemu_plugin_cb *cb, *next;
+
+    QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
+        qemu_plugin_vcpu_syscall_cb_t func = cb->f.vcpu_syscall;
+
+        func(cb->ctx->id, cpu->cpu_index, num, a1, a2, a3, a4, a5, a6, a7, a8);
+    }
+
+}
+
 static void
 do_plugin_register_cb(qemu_plugin_id_t id, enum qemu_plugin_event ev,
                       void *func, void *udata)
@@ -230,6 +250,12 @@ void qemu_plugin_vcpu_tlb_flush_cb(CPUState *cpu) {
     plugin_vcpu_cb__simple(cpu, QEMU_PLUGIN_EV_VCPU_TLB_FLUSH);
 }
 
+void qemu_plugin_vcpu_hypercall_cb(CPUState *cpu, int64_t num, uint64_t a1, uint64_t a2,
+                                   uint64_t a3, uint64_t a4, uint64_t a5,
+                                   uint64_t a6, uint64_t a7, uint64_t a8) {
+    plugin_vcpu_cb__syscall(QEMU_PLUGIN_EV_VCPU_HYPERCALL, cpu, num, a1, a2, a3, a4,
+                            a5, a6, a7, a8);
+}
 
 void qemu_plugin_vcpu_exit_hook(CPUState *cpu)
 {
@@ -408,18 +434,14 @@ qemu_plugin_vcpu_syscall(CPUState *cpu, int64_t num, uint64_t a1, uint64_t a2,
                          uint64_t a3, uint64_t a4, uint64_t a5,
                          uint64_t a6, uint64_t a7, uint64_t a8)
 {
-    struct qemu_plugin_cb *cb, *next;
-    enum qemu_plugin_event ev = QEMU_PLUGIN_EV_VCPU_SYSCALL;
+    enum qemu_plugin_event ev = QEMU_PLUGIN_EV_VCPU_SYSCALL_RET;
 
     if (!test_bit(ev, cpu->plugin_mask)) {
         return;
     }
+    plugin_vcpu_cb__syscall(ev, cpu, num, a1, a2, a3, a4,
+                            a5, a6, a7, a8);
 
-    QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
-        qemu_plugin_vcpu_syscall_cb_t func = cb->f.vcpu_syscall;
-
-        func(cb->ctx->id, cpu->cpu_index, num, a1, a2, a3, a4, a5, a6, a7, a8);
-    }
 }
 
 /*

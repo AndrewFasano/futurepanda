@@ -86,6 +86,12 @@ void qemu_plugin_register_vcpu_tlb_flush_cb(qemu_plugin_id_t id,
     plugin_register_cb(id, QEMU_PLUGIN_EV_VCPU_TLB_FLUSH, cb);
 }
 
+void qemu_plugin_register_vcpu_hypercall_cb(qemu_plugin_id_t id,
+                                         qemu_plugin_vcpu_syscall_cb_t cb)
+{
+    plugin_register_cb(id, QEMU_PLUGIN_EV_VCPU_HYPERCALL, cb);
+}
+
 void qemu_plugin_register_vcpu_exit_cb(qemu_plugin_id_t id,
                                        qemu_plugin_vcpu_simple_cb_t cb)
 {
