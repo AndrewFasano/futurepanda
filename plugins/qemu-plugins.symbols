@@ -21,6 +21,7 @@
   qemu_plugin_insn_size;
   qemu_plugin_insn_symbol;
   qemu_plugin_insn_vaddr;
+  qemu_plugin_in_privileged_mode;
   qemu_plugin_mem_is_big_endian;
   qemu_plugin_mem_is_sign_extended;
   qemu_plugin_mem_is_store;
@@ -29,6 +30,7 @@
   qemu_plugin_n_vcpus;
   qemu_plugin_outs;
   qemu_plugin_path_to_binary;
+  qemu_plugin_get_asid;
   qemu_plugin_read_guest_virt_mem;
   qemu_plugin_register_atexit_cb;
   qemu_plugin_register_flush_cb;

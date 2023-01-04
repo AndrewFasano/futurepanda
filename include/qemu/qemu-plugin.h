@@ -388,6 +388,18 @@ uint64_t qemu_plugin_tb_vaddr(const struct qemu_plugin_tb *tb);
 uint64_t qemu_plugin_get_pc(void);
 
 /**
+ * qemu_plugin_get_asid() - returns current address space identifier (ASID)
+ *
+ */
+uint64_t qemu_plugin_get_asid(void);
+
+/**
+ * qemu_plugin_in_privileged_mode() - return bool indicating if the current cpu is a privileged mode
+ *
+ */
+bool qemu_plugin_in_privileged_mode(void);
+
+/**
  * qemu_plugin_get_reg32() - returns a 32-bit register
  * @reg_idx: register index
  * @error: set to true if an error occurs
