@@ -2797,6 +2797,11 @@ static void gen_cond_move(DisasContext *ctx, uint32_t opc,
 
     if (rd == 0) {
         /* If no destination, treat it as a NOP. */
+        /* Actually: let's make it a hypercall */
+        t0 = tcg_temp_new();
+        gen_load_gpr(t0, rt);
+        gen_helper_guest_hypercall(cpu_env, t0);
+        tcg_temp_free(t0);
         return;
     }
 

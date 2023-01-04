@@ -255,6 +255,13 @@ enum qemu_plugin_mem_rw {
     QEMU_PLUGIN_MEM_RW,
 };
 
+typedef void
+(*qemu_plugin_vcpu_syscall_cb_t)(qemu_plugin_id_t id, unsigned int vcpu_index,
+                                 int64_t num, uint64_t a1, uint64_t a2,
+                                 uint64_t a3, uint64_t a4, uint64_t a5,
+                                 uint64_t a6, uint64_t a7, uint64_t a8);
+
+
 /**
  * qemu_plugin_register_tlb_flush_cb() - register a vCPU callback on tlb flush
  * change
@@ -268,6 +275,17 @@ enum qemu_plugin_mem_rw {
 void qemu_plugin_register_vcpu_tlb_flush_cb(qemu_plugin_id_t id,
                                             qemu_plugin_vcpu_udata_cb_t cb,
                                             void *userdata);
+/**
+ * qemu_plugin_register_vcpu_hypercall_cb() - register a vCPU callback on hypercall
+ * change
+ * @id: plugin ID
+ * @cb: callback
+ *
+ * The @cb function is called every time a vCPU flushes the tlb
+ *
+ */
+void qemu_plugin_register_vcpu_hypercall_cb(qemu_plugin_id_t id,
+                                            qemu_plugin_vcpu_syscall_cb_t cb);
 
 
 /**
@@ -659,12 +677,6 @@ void qemu_plugin_register_vcpu_mem_inline(struct qemu_plugin_insn *insn,
                                           uint64_t imm);
 
 
-
-typedef void
-(*qemu_plugin_vcpu_syscall_cb_t)(qemu_plugin_id_t id, unsigned int vcpu_index,
-                                 int64_t num, uint64_t a1, uint64_t a2,
-                                 uint64_t a3, uint64_t a4, uint64_t a5,
-                                 uint64_t a6, uint64_t a7, uint64_t a8);
 
 void qemu_plugin_register_vcpu_syscall_cb(qemu_plugin_id_t id,
                                           qemu_plugin_vcpu_syscall_cb_t cb);
