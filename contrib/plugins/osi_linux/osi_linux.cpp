@@ -21,6 +21,7 @@ extern "C" {
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "osi_linux";
 #include "../osi.h"
+#include "../hw_proc_id.h"
 }
 #include "../syscalls.h"
 
@@ -44,7 +45,7 @@ struct KernelProfile const *kernel_profile;
 extern const char *qemu_file;
 bool osi_initialized;
 static bool first_osi_check = true;
-
+char * target_name;
 
 /**
  * @brief Resolves a file struct and returns its full pathname.
@@ -136,7 +137,11 @@ void fill_osiproc(OsiProc *p, target_ptr_t task_addr) {
 
     // p->asid = taskd->mm->pgd (some kernel tasks are expected to return error)
     err = struct_get(&p->asid, task_addr, {ki.task.mm_offset, ki.mm.pgd_offset});
-    assert(err == struct_get_ret_t::SUCCESS);
+    //assert(err == struct_get_ret_t::SUCCESS);
+    if(err != struct_get_ret_t::SUCCESS) {
+      p->asid = 0;
+      printf("Yikes, couldn't read asid\n");
+    }
 
     // p->ppid = taskd->real_parent->pid
     err = struct_get( &p->ppid, task_addr,
@@ -251,7 +256,7 @@ void on_first_syscall(gpointer evdata, gpointer udata) {
  * @brief Test to see if we can read the current task struct
  */
 inline bool can_read_current() {
-    target_ptr_t ts = kernel_profile->get_current_task_struct();
+    target_ptr_t ts = kernel_profile->get_current_task_struct(target_name);
     return 0x0 != ts;
 }
 
@@ -346,13 +351,14 @@ void on_get_current_process(gpointer evdata, gpointer udata) {
     // OsiPage - TODO
 
     OsiProc *p = NULL;
-    target_ptr_t ts = kernel_profile->get_current_task_struct();
+    target_ptr_t ts = kernel_profile->get_current_task_struct(target_name);
     if (0x0 != ts) {
         p = (OsiProc *)g_malloc(sizeof(*p));
         if ((ts != last_ts) || (NULL == cached_comm_ptr) ||
             (0 != strncmp((char *)cached_comm_ptr, cached_name,
                           ki.task.comm_size))) {
             last_ts = ts;
+            printf("Task struct is %lx\n", ts);
             fill_osiproc(p, ts);
 
             // update the cache
@@ -362,7 +368,7 @@ void on_get_current_process(gpointer evdata, gpointer udata) {
             strncpy(cached_name, p->name, ki.task.comm_size);
             cached_pid = p->pid;
             cached_ppid = p->ppid;
-	    cached_start_time = p->create_time;
+            cached_start_time = p->create_time;
             cached_comm_ptr = qemu_plugin_virt_to_host(
                 ts + ki.task.comm_offset, ki.task.comm_size);
         } else {
@@ -372,7 +378,7 @@ void on_get_current_process(gpointer evdata, gpointer udata) {
             p->pid = cached_pid;
             p->ppid = cached_ppid;
             p->pages = NULL;
-	    p->create_time = cached_start_time;
+            p->create_time = cached_start_time;
         }
     }
     *out = p;
@@ -387,7 +393,7 @@ void on_get_current_process_handle(gpointer evdata, gpointer udata) {
 
     OsiProcHandle *p = NULL;
     // Very first thing that happens. Woop
-    target_ptr_t ts = kernel_profile->get_current_task_struct();
+    target_ptr_t ts = kernel_profile->get_current_task_struct(target_name);
     if (ts) {
         p = (OsiProcHandle *)g_malloc(sizeof(OsiProcHandle));
         fill_osiprochandle(p, ts);
@@ -430,6 +436,12 @@ void on_get_mappings(gpointer evdata, gpointer udata) {
 
     OsiModule m;
     target_ptr_t vma_first, vma_current;
+    __asm__("int3");
+
+    if (p == 0) {
+      printf("taskd invalid\n");
+      goto error0;
+    }
 
     // Read the module info for the process.
     vma_first = vma_current = get_vma_first(p->taskd);
@@ -472,7 +484,7 @@ void on_get_current_thread(OsiThread **out) {
     if (!osi_guest_is_ready((void**)out)) return;
 
     OsiThread *t = NULL;
-    target_ptr_t ts = kernel_profile->get_current_task_struct();
+    target_ptr_t ts = kernel_profile->get_current_task_struct(target_name);
     if (0x0 != ts) {
         t = (OsiThread *)g_malloc(sizeof(OsiThread));
         if (last_ts != ts) {
@@ -693,8 +705,6 @@ void restore_after_snapshot(qemu_plugin_id_t id, unsigned int cpu_index) {
 }
 
 
-// Disable inserted TCG calls for now
-#if 0
 // Keep track of which tasks have entered execve. Note that we simply track
 // based on the task struct. This works because the other threads in the thread
 // group will be terminated and the current task will be the only task in the
@@ -702,15 +712,36 @@ void restore_after_snapshot(qemu_plugin_id_t id, unsigned int cpu_index) {
 // because the execve call will return to the calling thread.
 static std::unordered_set<target_ptr_t> tasks_in_execve;
 
-static void exec_enter(CPUState *cpu)
+void on_syscall(gpointer evdata, gpointer udata);
+
+void on_syscall(gpointer evdata, gpointer udata)
 {
+    uint64_t pc = ((uint64_t*)evdata)[0];
+    uint64_t callno = ((uint64_t*)evdata)[1];
+
+    char * sc_name = syscalls_get_name_qpp(callno);
+    if (sc_name == NULL) return;
+
+    bool is_execve = 0 == strcmp(sc_name, "execve");
+    free(sc_name);
+    if (!is_execve) return;
+    printf("EXECVE\n");
+
     bool **out=0;
     if (!osi_guest_is_ready((void**)out)) return;
-    target_ptr_t ts = kernel_profile->get_current_task_struct();
+    target_ptr_t ts = kernel_profile->get_current_task_struct(target_name);
     tasks_in_execve.insert(ts);
 }
-static void exec_check(CPUState *cpu)
+
+void do_notify_task_change(unsigned int cpu_index, void* udata)
 {
+    notify_task_change_qpp(cpu_index, udata);
+}
+
+//static void exec_check(CPUState *cpu)
+void exec_check(unsigned int cpu_index, void* udata)
+{
+    // XXX: per cpu?
     // Fast Path: Nothing is in execve, so there's nothing to do.
     if (0 == tasks_in_execve.size()) {
         return;
@@ -719,23 +750,25 @@ static void exec_check(CPUState *cpu)
     if (!osi_guest_is_ready((void**)out)) return;
 
     // Slow Path: Something is in execve, so we have to check.
-    target_ptr_t ts = kernel_profile->get_current_task_struct();
+    target_ptr_t ts = kernel_profile->get_current_task_struct(target_name);
     auto it = tasks_in_execve.find(ts);
-    if (tasks_in_execve.end() != it && !panda_in_kernel(cpu)) {
-        notify_task_change(cpu);
+    if (tasks_in_execve.end() != it && !qemu_plugin_in_privileged_mode()) {
+        do_notify_task_change(cpu_index, udata);
         tasks_in_execve.erase(ts);
     }
-}
-#endif
-
-void do_notify_task_change(unsigned int cpu_index, void* udata) {
-    notify_task_change_qpp(cpu_index, udata);
 }
 
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 {
   //Formerly "Before_tcg_codegen"
   uint64_t pc = qemu_plugin_tb_vaddr(tb);
+
+  // Always do exec_check
+  qemu_plugin_register_vcpu_tb_exec_cb(tb, exec_check,
+                                       QEMU_PLUGIN_CB_NO_REGS,
+                                       NULL);
+
+
   if (0x0 != ki.task.switch_task_hook_addr && pc == ki.task.switch_task_hook_addr) {
     // Instrument the task switch address.
     qemu_plugin_register_vcpu_tb_exec_cb(tb, do_notify_task_change,
@@ -750,19 +783,14 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 extern "C" QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                    const qemu_info_t *info, int argc, char **argv) {
 
-        // Register hooks in the kernel to provide task switch notifications.
-        //assert(init_osi_api());
-        //pcb.before_tcg_codegen = before_tcg_codegen_callback;
-        qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
-        //panda_register_callback(self, PANDA_CB_BEFORE_TCG_CODEGEN, pcb);
-#if defined(OSI_LINUX_TEST)
-        //panda_cb pcb = { .asid_changed = osi_linux_test };
-        //panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
-#endif
+  // Register hooks in the kernel to provide task switch notifications.
+  qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
 
     gchar* kconf_file = NULL;
     gchar* kconf_group = NULL;
     osi_initialized = false;
+
+    target_name = strdup(info->target_name);
 
     //parse the arguments
     for (int i = 0; i < argc; i++) {
@@ -799,34 +827,18 @@ extern "C" QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
     qemu_plugin_reg_callback("osi", "on_get_process", on_get_process);
     qemu_plugin_reg_callback("osi", "on_get_current_process_handle", on_get_current_process_handle);
     qemu_plugin_reg_callback("osi", "on_get_current_process", on_get_current_process);
+    qemu_plugin_reg_callback("osi", "on_get_mappings", on_get_mappings);
 
     /*
     QPP_REG_CB("osi", on_get_processes, on_get_processes);
     QPP_REG_CB("osi", on_get_process_handles, on_get_process_handles);
-    QPP_REG_CB("osi", on_get_mappings, on_get_mappings);
     QPP_REG_CB("osi", on_get_current_thread, on_get_current_thread);
     QPP_REG_CB("osi", on_get_process_pid, on_get_process_pid);
     QPP_REG_CB("osi", on_get_process_ppid, on_get_process_ppid);
     */
 
-    // By default, we'll request syscalls to load on first syscall
-    //panda_require("syscalls");
-
-    // Setup exec task change notifications.
-    /*
-    PPP_REG_CB("syscalls", on_sys_execve_enter, [](CPUState *cpu,
-        target_ulong pc, target_ulong fnp, target_ulong ap,
-        target_ulong envp)
-    {
-        exec_enter(cpu);
-    });
-    PPP_REG_CB("syscalls", on_sys_execveat_enter, [](CPUState *cpu,
-        target_ulong pc, int dirfd, target_ulong pathname_ptr, target_ulong ap,
-        target_ulong envp, int flags)
-    {
-        exec_enter(cpu);
-    });
-    */
+    // execve analysis
+    //qemu_plugin_reg_callback("syscalls", "on_all_sys_enter", on_syscall);
 
     qemu_plugin_register_vcpu_loadvm_cb(id, restore_after_snapshot);
 
@@ -834,6 +846,79 @@ extern "C" QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
 
 error:
     return 1;
+}
+
+/**
+ * @brief Retrieves the task_struct address using per cpu information.
+ */
+target_ptr_t default_get_current_task_struct(char* target_name)
+{
+    struct_get_ret_t err;
+    target_ptr_t current_task_addr;
+    target_ptr_t ts;
+
+    if (strcmp(target_name, "x86_64") == 0) {
+      current_task_addr = ki.task.current_task_addr;
+    } else if (strcmp(target_name, "mipsel") == 0) {
+      // __current_thread_info is stored in KERNEL r28
+      // userspace clobbers it but kernel restores (somewhow?)
+      // First field of struct is task - no offset needed
+      current_task_addr = hw_proc_id_get_qpp(); // HWID returned by hw_proc_id is the cached r28 value
+    } else {
+      printf("ERROR: Unsupported target\n");
+      assert(0);
+    }
+    err = struct_get(&ts, current_task_addr, ki.task.per_cpu_offset_0_addr);
+    //assert(err == struct_get_ret_t::SUCCESS && "failed to get current task struct");
+    if (err != struct_get_ret_t::SUCCESS) {
+      // Callers need to check if we return NULL!
+      return 0;
+    }
+    fixupendian(ts);
+    return ts;
+}
+
+/**
+ * @brief Retrieves the address of the following task_struct in the process list.
+ */
+target_ptr_t default_get_task_struct_next(target_ptr_t task_struct)
+{
+    struct_get_ret_t err;
+    target_ptr_t tasks;
+    err = struct_get(&tasks, task_struct, ki.task.tasks_offset);
+    fixupendian(tasks);
+    assert(err == struct_get_ret_t::SUCCESS && "failed to get next task");
+    return tasks-ki.task.tasks_offset;
+}
+
+/**
+ * @brief Retrieves the thread group leader address from task_struct.
+ */
+target_ptr_t default_get_group_leader(target_ptr_t ts)
+{
+    struct_get_ret_t err;
+    target_ptr_t group_leader;
+    err = struct_get(&group_leader, ts, ki.task.group_leader_offset);
+    fixupendian(group_leader);
+    assert(err == struct_get_ret_t::SUCCESS && "failed to get group leader for task");
+    return group_leader;
+}
+
+/**
+ * @brief Retrieves the array of file structs from the files struct.
+ * The n-th element of the array corresponds to the n-th open fd.
+ */
+target_ptr_t default_get_file_fds(target_ptr_t files)
+{
+    struct_get_ret_t err;
+    target_ptr_t files_fds;
+    err = struct_get(&files_fds, files, {ki.fs.fdt_offset, ki.fs.fd_offset});
+    if (err != struct_get_ret_t::SUCCESS) {
+        printf("Failed to retrieve file structs (error code: %d)", err);
+        return (target_ptr_t)NULL;
+    }
+    fixupendian(files_fds);
+    return files_fds;
 }
 
 /* vim:set tabstop=4 softtabstop=4 expandtab: */
