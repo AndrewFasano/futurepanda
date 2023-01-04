@@ -6,17 +6,17 @@
 #include <stdio.h>
 #include <qemu-plugin.h>
 #include <plugin-qpp.h>
-#include "syscalls.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "syscalls";
+#include "syscalls.h"
 static qemu_plugin_id_t self_id;
 
-//QPP_CREATE_CB(on_all_sys_enter);
 is_syscall_t is_syscall_fn = NULL;
 get_callno_t get_callno_fn = NULL;
+num_to_name_t get_num_to_name_fn = NULL;
 
 bool big_endian = false; // XXX TODO
 bool is_syscall_i386(unsigned char* buf, size_t buf_len) {
@@ -84,16 +84,18 @@ bool is_syscall_aarch64(unsigned char* buf, size_t buf_len) {
 
 bool is_syscall_mips(unsigned char* buf, size_t buf_len) {
   assert(buf_len >= 4);
-  if (big_endian) {
-    // 32-bit MIPS "syscall" instruction - big endian
-    if ((buf[0] == 0x00) && (buf[1] == 0x00) && (buf[2] == 0x00) && (buf[3] == 0x0c)) {
-      return true;
-    }
-  } else {
-    // 32-bit MIPS "syscall" instruction - little endian
-    if ((buf[3] == 0x00) && (buf[2] == 0x00) && (buf[1] == 0x00) && (buf[0] == 0x0c)) {
-      return true;
-    }
+  // 32-bit MIPS "syscall" instruction - big endian
+  if ((buf[0] == 0x00) && (buf[1] == 0x00) && (buf[2] == 0x00) && (buf[3] == 0x0c)) {
+    return true;
+  }
+  return false;
+}
+
+bool is_syscall_mipsel(unsigned char* buf, size_t buf_len) {
+  assert(buf_len >= 4);
+  // 32-bit MIPS "syscall" instruction - little endian
+  if ((buf[3] == 0x00) && (buf[2] == 0x00) && (buf[1] == 0x00) && (buf[0] == 0x0c)) {
+    return true;
   }
   return false;
 }
@@ -133,20 +135,43 @@ uint64_t get_callno_other(bool * error) {
   return 0;
 }
 
+char * num_to_name_x86_64(int callno) {
+  switch(callno) {
+    case 59:
+      return strdup("execve");
+    default:
+      return NULL;
+  }
+}
+
+char * num_to_name_mips(int callno) {
+  switch(callno) {
+    case 4011:
+      return strdup("execve");
+    default:
+      return NULL;
+  }
+}
+char * num_to_name_other(int callno) {
+  assert(0);
+}
+
 typedef struct {
   const char *qemu_target;
   is_syscall_t is_syscall_fn;
   get_callno_t get_callno_fn;
+  num_to_name_t get_num_to_name_fn;
 } SyscallDetectorSelector;
 
 // aarch64, sparc, sparc64, i386, x86_64
 static SyscallDetectorSelector syscall_selectors[] = {
-  { "i386",    is_syscall_i386,    get_callno_i386  },
-  { "x86_64",  is_syscall_x86_64,  get_callno_x86_64  },
-  { "arm",     is_syscall_arm,     get_callno_arm  },
-  { "aarch64", is_syscall_aarch64, get_callno_aarch64  },
-  { "mips",    is_syscall_mips,    get_callno_mips  },
-  { NULL,      is_syscall_other,   get_callno_other  },
+  { "i386",      is_syscall_i386,    get_callno_i386,    num_to_name_other},
+  { "x86_64",    is_syscall_x86_64,  get_callno_x86_64,  num_to_name_x86_64  },
+  { "arm",       is_syscall_arm,     get_callno_arm,     num_to_name_other  },
+  { "aarch64",   is_syscall_aarch64, get_callno_aarch64, num_to_name_other  },
+  { "mips",      is_syscall_mips,    get_callno_mips,    num_to_name_mips  },
+  { "mipsel",    is_syscall_mipsel,  get_callno_mips,    num_to_name_mips  },
+  { NULL,        is_syscall_other,   get_callno_other,   num_to_name_other  },
 };
 
 static void syscall_64(unsigned int cpu_index, void *udata) {
@@ -157,7 +182,6 @@ static void syscall_64(unsigned int cpu_index, void *udata) {
     return;
   }
   uint64_t pc = qemu_plugin_get_pc();
-  //QPP_RUN_CB(on_all_sys_enter, pc, callno);
 
   uint64_t evdata[2];
   evdata[0] = pc;
@@ -181,6 +205,20 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb) {
   }
 }
 
+QEMU_PLUGIN_EXPORT char * syscalls_get_name(int callno) {
+  if (get_num_to_name_fn == NULL)
+    return NULL;
+  return get_num_to_name_fn(callno);
+}
+
+QEMU_PLUGIN_EXPORT uint64_t syscalls_get_callno(bool* error) {
+  if (get_callno_fn == NULL) {
+    *error = true;
+    return 0;
+  }
+  return get_callno_fn(error);
+}
+
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                    const qemu_info_t *info, int argc, char **argv) {
     qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
@@ -194,6 +232,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
             strcmp(entry->qemu_target, info->target_name) == 0) {
             is_syscall_fn = entry->is_syscall_fn;
             get_callno_fn = entry->get_callno_fn;
+            get_num_to_name_fn = entry->get_num_to_name_fn;
             break;
         }
     }
