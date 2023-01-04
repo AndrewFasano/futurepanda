@@ -224,10 +224,78 @@ qemu_plugin_tb_get_insn(const struct qemu_plugin_tb *tb, size_t idx)
 uint64_t qemu_plugin_get_pc(void) {
     CPUState *cpu = current_cpu;
     CPUArchState *env = (CPUArchState *)cpu->env_ptr;
-    target_ulong pc, cs_base;
+    uint64_t pc = 0;
+    target_ulong cs_base;
     uint32_t flags;
-    cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-    return (uint64_t)pc;
+    cpu_get_tb_cpu_state(env, (target_ulong*)&pc, &cs_base, &flags);
+    return pc;
+}
+
+/*
+  returns current asid or address-space id.
+  architecture-independent
+*/
+uint64_t qemu_plugin_get_asid(void) {
+#if defined(TARGET_I386)
+	CPUState *cpu = current_cpu;
+	CPUArchState *env = (CPUArchState *)cpu->env_ptr;
+	return env->cr[3];
+#elif defined(TARGET_ARM)
+//#if defined(TARGET_AARCH64)
+	return 0; // XXX: TODO
+/*
+#else
+	target_ulong table;
+	bool rc = arm_get_vaddr_table(cpu,
+					&table,
+					(uint32_t)qemu_plugin_get_pc);
+	assert(rc);
+	return table;
+*/
+//#endif
+//#elif defined(TARGET_PPC)
+//	CPUArchState *env = (CPUArchState *)cpu->env_ptr;
+//	return env->sr[0];
+#elif defined(TARGET_MIPS)
+	CPUState *cpu = current_cpu;
+	CPUArchState *env = (CPUArchState *)cpu->env_ptr;
+	return (env->CP0_EntryHi & env->CP0_EntryHi_ASID_mask);
+#else
+	printf("WARNING: qemu_plugin_get_asid() not implemented for target architecture\n");
+	return 0;
+#endif
+}
+
+
+/* (not kernel-doc)
+ * panda_in_kernel_mode() - Determine if guest is in kernel.
+ * @cpu: Cpu state.
+ *
+ * Determines if guest is currently executing in kernel mode, e.g. execution privilege level.
+ *
+ * Return: True if in kernel, false otherwise.
+ */
+bool qemu_plugin_in_privileged_mode(void) {
+    CPUState *cpu = current_cpu;
+    CPUArchState *env = (CPUArchState *)cpu->env_ptr;
+#if defined(TARGET_I386)
+    return ((env->hflags & HF_CPL_MASK) == 0);
+#elif defined(TARGET_ARM)
+    // See target/arm/cpu.h arm_current_el
+    if (env->aarch64) {
+        return extract32(env->pstate, 2, 2) > 0;
+    }
+    // Note: returns true for non-SVC modes (hypervisor, monitor, system, etc).
+    // See: https://www.keil.com/pack/doc/cmsis/Core_A/html/group__CMSIS__CPSR__M.html
+    return ((env->uncached_cpsr & CPSR_M) > ARM_CPU_MODE_USR);
+#elif defined(TARGET_PPC)
+    return msr_pr;
+#elif defined(TARGET_MIPS)
+    return (env->hflags & MIPS_HFLAG_KSU) == MIPS_HFLAG_KM;
+#else
+#error "panda_in_kernel_mode() not implemented for target architecture."
+    return false;
+#endif
 }
 
 int32_t qemu_plugin_get_reg32(unsigned int reg_idx, bool* error) {
