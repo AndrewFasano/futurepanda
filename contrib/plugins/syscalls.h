@@ -1,6 +1,10 @@
 #ifndef SYSCALLS_H
 #define SYSCALLS_H
 
+/* Public functions */
+QPP_FUN_PROTOTYPE(syscalls, char*, syscalls_get_name, int);
+QPP_FUN_PROTOTYPE(syscalls, uint64_t, syscalls_get_callno, bool*);
+
 /* 
  * Non-public functions 
  */
@@ -19,4 +23,9 @@ uint64_t get_callno_arm(bool* error);
 uint64_t get_callno_aarch64(bool* error);
 uint64_t get_callno_mips(bool* error);
 uint64_t get_callno_other(bool* error);
+
+typedef char* (*num_to_name_t)(int callno);
+char * num_to_name_x86_64(int);
+char * num_to_name_mips(int);
+char * num_to_name_other(int);
 #endif
