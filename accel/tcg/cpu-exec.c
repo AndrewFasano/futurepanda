@@ -1025,7 +1025,7 @@ int cpu_exec(CPUState *cpu)
             }
 #endif
             /* See if we can patch the calling TB. */
-            if (last_tb) {
+            if (last_tb && false) { // XXX: Disabled TB chaining
                 tb_add_jump(last_tb, tb_exit, tb);
             }
 
