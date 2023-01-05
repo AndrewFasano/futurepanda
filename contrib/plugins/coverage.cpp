@@ -18,9 +18,15 @@ QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "coverage";
 #include <plugin-qpp.h>
 }
 
-static FILE *fp;
-static const char *file_name = "file.trace";
+//static FILE *fp;
+//static const char *file_name = "file.trace";
+static const char *map_name = "coverage.map";
 static GMutex lock;
+//const uint64_t fnv_prime = 0x100000001b3ULL;
+const uint32_t fnv_prime = 0x811C9DC5;
+
+#define MAP_SIZE 0xffffff
+static char *shared_mem;
 
 /*
  * Process map: (pid, create) -> Process(name, blocks, active_vmas, last_pc)
@@ -37,9 +43,9 @@ typedef struct {
 typedef struct {
     uint32_t start;
     uint32_t size;
-    char mod[64]; // TODO use an ID into all modules?
-    uint32_t offset;
-    bool     exec;
+    //char mod[64]; // TODO use an ID into all modules?
+    //uint32_t offset;
+    //bool     exec;
 } bb_entry_t;
 
 
@@ -54,9 +60,11 @@ typedef struct {
   uint32_t ppid;
   uint32_t create_time;
   char comm[64];
+  //uint32_t comm_hash;
   std::vector<vma_t*>* vmas;
-  std::set<bb_entry_t*, block_cmp>* blocks;
+  //std::set<bb_entry_t*, block_cmp>* blocks;
   uint32_t prev_location;
+
   uint32_t last_bb_end;
   uint32_t last_bb_start;
 } proc_t;
@@ -73,8 +81,24 @@ struct hash_tuple {
 std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple> *proc_map = \
     new std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple>;
 
+uint32_t hash(char *input) {
+    uint32_t rv = 0;
+    for (size_t i=0; i < strlen(input); i++) {
+      rv *= fnv_prime;
+      rv ^= (uint32_t)input[i];
+    }
+
+    return rv;
+}
+
 static void plugin_exit(qemu_plugin_id_t id, void *p)
 {
+    FILE *f = fopen(map_name, "wb");
+    fwrite(shared_mem, 1, MAP_SIZE, f);
+    fclose(f);
+
+  
+#if 0
     for (auto& k : *proc_map) {
       proc_t *p = k.second;
       for (auto bb : *p->blocks) {
@@ -84,8 +108,8 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
         g_free(bb);
       }
     }
-
     fclose(fp);
+#endif
 }
 
 proc_t *current_proc;
@@ -107,8 +131,29 @@ static void vcpu_tb_exec(unsigned int cpu_index, void *udata)
 
     for (auto &&e : *current_proc->vmas) {
       if (bb->start >= e->vma_start && bb->start < e->vma_end) {
-        g_mutex_lock(&lock);
+       // HIT! We're at a relative offset to some region we know of
+       uint32_t offset = bb->start - e->vma_start;
 
+       // https://github.com/AFLplusplus/AFLplusplus/blob/stable/frida_mode/MapDensity.md
+       // Do we want to always hash in filename? It will be kind of expensive?
+       uint32_t cur_location = hash(e->filename) ^ ((offset >> 4) ^ (offset << 8));
+
+#if 0
+       printf("HASH %x at  %s + %x\n",
+              (cur_location ^ current_proc->prev_location) % MAP_SIZE,
+              e->filename, offset);
+        printf("\tcur_location = %x\n", cur_location);
+        printf("\tprev_location = %x\n", current_proc->prev_location);
+#endif
+
+        //printf("\t%s hashes to %x\n\toffset >> 4 is %x\t offset << 8 is %x\n", e->filename, hash(e->filename), offset >>4, offset << 8);
+        //printf("\toffset >> 4 ^ offset << 8 is %x\n", (offset >>4) ^ (offset << 8));
+
+       shared_mem[(cur_location ^ current_proc->prev_location) % MAP_SIZE]++;
+       current_proc->prev_location = cur_location >> 1;
+
+#if 0
+        g_mutex_lock(&lock);
         // XXX we only mark the block as "executed" if we know where it executed.
         // Maybe this is a bad design, but otherwise we see a lot of -1s for offset
         bb->exec = true;
@@ -117,9 +162,11 @@ static void vcpu_tb_exec(unsigned int cpu_index, void *udata)
         bb->offset = bb->start - e->vma_start;
         g_mutex_unlock(&lock);
         //printf("%s (%d) hit block at %s + %x\n", current_proc->comm, current_proc->pid, bb->mod, bb->offset);
+#endif
         break;
       }
     }
+    // Note we can't free BB since this callback will be run multiple times
 }
 
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb);
@@ -143,14 +190,13 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
     bb_entry_t *bb = g_new0(bb_entry_t, 1);
     bb->start = pc;
     bb->size = size;
-    bb->mod[0] = char(0);
-    bb->offset = -1;
-    bb->exec = false;
+    //bb->mod[0] = char(0);
+    //bb->offset = -1;
+    //bb->exec = false;
 
-    g_mutex_lock(&lock);
-    //current_proc->blocks->push_back(bb);
-    current_proc->blocks->insert(bb);
-    g_mutex_unlock(&lock);
+    //g_mutex_lock(&lock);
+    //current_proc->blocks->insert(bb);
+    //g_mutex_unlock(&lock);
 
     qemu_plugin_register_vcpu_tb_exec_cb(tb, vcpu_tb_exec,
                                          QEMU_PLUGIN_CB_NO_REGS,
@@ -173,6 +219,7 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       if (qemu_plugin_read_guest_virt_mem(a1, &pending_proc.comm, sizeof(pending_proc.comm)) == -1) {
         strncpy(pending_proc.comm, "[error]", sizeof(pending_proc.comm));
       }
+      //pending_proc.comm_hash = hash(pending_proc.comm);
       break;
     }
 
@@ -195,7 +242,9 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
         (*proc_map)[k]->ppid = pending_proc.ppid;
         (*proc_map)[k]->create_time = pending_proc.create_time;
         (*proc_map)[k]->vmas = new std::vector<vma_t*>;
-        (*proc_map)[k]->blocks = new std::set<bb_entry_t*, block_cmp>;
+        (*proc_map)[k]->prev_location = hash(pending_proc.comm);
+        //(*proc_map)[k]->comm_hash = hash(pending_proc.comm);
+        //(*proc_map)[k]->blocks = new std::set<bb_entry_t*, block_cmp>;
         strncpy((*proc_map)[k]->comm, pending_proc.comm, sizeof((*proc_map)[k]->comm));
         g_mutex_unlock(&lock);
       }
@@ -210,8 +259,9 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
 
     case 595: { // update proc name (execve)
       // Don't reset current_proc, just modify its name in place
-      if (qemu_plugin_read_guest_virt_mem(a1, &current_proc->comm, sizeof(current_proc->comm)) == -1) {
-        //printf("ERROR: couldn't read new process name on execve\n");
+      if (qemu_plugin_read_guest_virt_mem(a1, &current_proc->comm, sizeof(current_proc->comm)) != -1) {
+        current_proc->prev_location = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
+        //current_proc->comm_hash = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
       }
     }
 
@@ -289,11 +339,18 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info,
     for (int i = 0; i < argc; i++) {
         g_autofree char **tokens = g_strsplit(argv[i], "=", 2);
         if (g_strcmp0(tokens[0], "filename") == 0) {
-            file_name = g_strdup(tokens[1]);
+            //file_name = g_strdup(tokens[1]);
+            map_name = g_strdup(tokens[1]);
         }
     }
 
-    fp = fopen(file_name, "wb");
+    shared_mem = (char*)malloc(MAP_SIZE);
+    if (shared_mem == NULL) {
+      printf("Unable to allocate memory\n");
+      return 1;
+    }
+
+    //fp = fopen(file_name, "wb");
     qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
     qemu_plugin_register_vcpu_hypercall_cb(id, vcpu_hypercall);
     qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);
