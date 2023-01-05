@@ -70,6 +70,9 @@ kernelinfo_read.o: osi_linux/utils/kernelinfo/kernelinfo_read.c osi_linux/utils/
 hw_proc_id.o: hw_proc_id.cpp
 	$(CC) $(CPPFLAGS) -c -o $@ $<
 
+coverage.o: coverage.cpp
+	$(CC) $(CPPFLAGS) -c -o $@ $<
+
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
