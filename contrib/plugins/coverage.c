@@ -7,11 +7,10 @@
 #include <stdio.h>
 #include <glib.h>
 
-#include <plugin-qpp.h>
 #include <qemu-plugin.h>
-
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "coverage";
+#include <plugin-qpp.h>
 
 static FILE *fp;
 static const char *file_name = "file.trace";
@@ -128,6 +127,24 @@ void task_change(gpointer evdata, gpointer udata) {
 }
 #endif
 
+void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, uint64_t a1, uint64_t a2,
+                    uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7, uint64_t a8) {
+  // Debug only
+  if (num == 0) {
+    char comm[16];
+    printf("Plugin sees hypercall. Num=%ld: Guest kernel is switching to process with name at %lx =>", num, a1);
+    if (qemu_plugin_read_guest_virt_mem(a1, &comm, sizeof(comm)) != -1) {
+      printf("'%s'\n", comm);
+    } else {
+      printf("[error]\n");
+    }
+  }else {
+    printf("Num %ld arg1 %ld\n", num, a1);
+  }
+
+}
+
+
 QEMU_PLUGIN_EXPORT
 int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info,
                         int argc, char **argv)
@@ -142,7 +159,8 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info,
     plugin_init();
 
     //qemu_plugin_reg_callback("osi", "on_task_change", task_change);
-    qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
+    //qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
+    qemu_plugin_register_vcpu_hypercall_cb(id, vcpu_hypercall);
     qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);
 
     return 0;
