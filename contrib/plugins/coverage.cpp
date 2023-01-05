@@ -56,6 +56,9 @@ typedef struct {
   char comm[64];
   std::vector<vma_t*>* vmas;
   std::set<bb_entry_t*, block_cmp>* blocks;
+  uint32_t prev_location;
+  uint32_t last_bb_end;
+  uint32_t last_bb_start;
 } proc_t;
 
 struct hash_tuple {
@@ -95,6 +98,13 @@ static void vcpu_tb_exec(unsigned int cpu_index, void *udata)
 
     bb_entry_t *bb = (bb_entry_t *) udata;
 
+    // If we're re-executing the end of the last block, bail
+    if (bb->start >= current_proc->last_bb_start && bb->start < current_proc->last_bb_end)
+      return;
+
+    current_proc->last_bb_start = bb->start;
+    current_proc->last_bb_end = bb->start+bb->size;
+
     for (auto &&e : *current_proc->vmas) {
       if (bb->start >= e->vma_start && bb->start < e->vma_end) {
         g_mutex_lock(&lock);
@@ -119,11 +129,12 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
     if (!current_proc) return; // Start up: no idea where we are
     uint64_t pc = qemu_plugin_tb_vaddr(tb);
 
-    // Check if this BB is a subset of a prior BB - if so bail!
-    for (auto oldbb : *current_proc->blocks) { // XXX INEFFICIENT
+#if 0
+    for (auto oldbb : *current_proc->blocks) { // XXX this is probably a bit slow!
       if (pc > oldbb->start && pc < oldbb->start + oldbb->size)
         return;
     }
+#endif
 
     size_t n = qemu_plugin_tb_n_insns(tb);
     struct qemu_plugin_insn* last_insn = qemu_plugin_tb_get_insn(tb, n-1);
@@ -184,7 +195,6 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
         (*proc_map)[k]->ppid = pending_proc.ppid;
         (*proc_map)[k]->create_time = pending_proc.create_time;
         (*proc_map)[k]->vmas = new std::vector<vma_t*>;
-        //(*proc_map)[k]->blocks = new std::vector<bb_entry_t*>;
         (*proc_map)[k]->blocks = new std::set<bb_entry_t*, block_cmp>;
         strncpy((*proc_map)[k]->comm, pending_proc.comm, sizeof((*proc_map)[k]->comm));
         g_mutex_unlock(&lock);
