@@ -44,9 +44,9 @@ target_ulong helper_dbitswap(target_ulong rt)
 }
 #endif
 
-void helper_guest_hypercall(CPUMIPSState *env, uint32_t arg) {
+void helper_guest_hypercall(CPUMIPSState *env, uint32_t num, uint32_t a1) {
   CPUState *cpu = &env_archcpu(env)->parent_obj;
-  qemu_plugin_vcpu_hypercall_cb(cpu, (uint64_t)arg, 0, 0, 0, 0, 0, 0, 0, 0);
+  qemu_plugin_vcpu_hypercall_cb(cpu, (uint64_t)num, (uint64_t)a1, 0, 0, 0, 0, 0, 0, 0);
 }
 
 target_ulong helper_bitswap(target_ulong rt)
