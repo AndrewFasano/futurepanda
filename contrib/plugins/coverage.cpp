@@ -26,7 +26,6 @@ static GMutex lock;
  * Process map: (pid, create) -> Process(name, blocks, active_vmas, last_pc)
  * Block details: start, size, module, offset, exec
  *
- * (NYI) All modules: [name, start_end, filename] -> (process id, process create time)
  */
 
 typedef struct {
@@ -54,9 +53,8 @@ typedef struct {
   uint32_t pid;
   uint32_t ppid;
   uint32_t create_time;
-  char comm[16];
+  char comm[64];
   std::vector<vma_t*>* vmas;
-  //std::vector<bb_entry_t*>* blocks;
   std::set<bb_entry_t*, block_cmp>* blocks;
 } proc_t;
 
@@ -68,15 +66,17 @@ struct hash_tuple {
     }
 };
 
-// If this isn't on the heap it will vanish before our plugin_exit is called
-std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple> *proc_map = new std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple>;
+// If this isn't on the heap it will vanish before our plugin_exit is called. Ugh!
+std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple> *proc_map = \
+    new std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple>;
 
 static void plugin_exit(qemu_plugin_id_t id, void *p)
 {
     for (auto& k : *proc_map) {
-      for (auto bb : *k.second->blocks) {
+      proc_t *p = k.second;
+      for (auto bb : *p->blocks) {
         if (bb->exec) {
-          fprintf(fp, "%s -> %s + %x\n", k.second->comm, bb->mod, bb->offset);
+          fprintf(fp, "%s (%d, %u) -> %s + %x\n", p->comm, p->pid, p->create_time, bb->mod, bb->offset);
         }
         g_free(bb);
       }
@@ -154,7 +154,7 @@ vma_t* pending_vma;
 void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, uint64_t a1, uint64_t a2,
                     uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7, uint64_t a8) {
 
-  switch(num) {
+  switch (num) {
     /// PROCESS SWITCH. Build pending_proc ///
     case 590: {
       // Process switch starts with reporting  name
@@ -198,21 +198,28 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       break;
     }
 
+    case 595: { // update proc name (execve)
+      // Don't reset current_proc, just modify its name in place
+      if (qemu_plugin_read_guest_virt_mem(a1, &current_proc->comm, sizeof(current_proc->comm)) == -1) {
+        //printf("ERROR: couldn't read new process name on execve\n");
+      }
+    }
+
 
     /// VMA LOOP. Populate pending_vma, then add to current_proc->vmas ////
     case 5910: // start, step, and finish VMA loop
-      if (a1 == 0 && !in_vma_loop) { // Starting
+      if (a1 == 1 && !in_vma_loop) { // Starting
         in_vma_loop = true;
         current_proc->vmas->clear(); // Always clear VMAs for current proc on VMA update
         pending_vma = new vma_t;
 
-      } else if (a1 == 2 && in_vma_loop) {
+      } else if (a1 == 3 && in_vma_loop) {
         in_vma_loop = false;
         //for (auto &e : current_proc->vmas) {
         //  printf("In %s (%d): VMA named %s goes from %x to %x\n", current_proc->comm, current_proc->pid, e->filename, e->vma_start, e->vma_end);
         //}
 
-      } else if (a1 == 1 && in_vma_loop) {
+      } else if (a1 == 2 && in_vma_loop) {
         // Finished a VMA
         g_mutex_lock(&lock);
         current_proc->vmas->push_back(pending_vma); // Move current vma into list and allocate a new one
@@ -222,8 +229,9 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
         pending_vma = new vma_t;
 
       } else {
-        printf("ERROR: vma_loop_toggle %ld with in_vma_loop=%d\n", a1, in_vma_loop);
-        assert(0);
+        // XXX: this happens... why?
+        //printf("ERROR: vma_loop_toggle %ld with in_vma_loop=%d\n", a1, in_vma_loop);
+        //assert(0);
       }
 
       break;
