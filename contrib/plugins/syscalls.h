@@ -14,6 +14,7 @@ bool is_syscall_x86_64(unsigned char* buf, size_t buf_len);
 bool is_syscall_arm(unsigned char* buf, size_t buf_len);
 bool is_syscall_aarch64(unsigned char* buf, size_t buf_len);
 bool is_syscall_mips(unsigned char* buf, size_t buf_len);
+bool is_syscall_mipsel(unsigned char* buf, size_t buf_len);
 bool is_syscall_other(unsigned char* buf, size_t buf_len);
 
 typedef uint64_t (*get_callno_t)(bool* error);
