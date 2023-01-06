@@ -1,13 +1,14 @@
 #include <stdio.h>
 #include <qemu-plugin.h>
-#include <plugin-qpp.h>
-#include "syscalls.h"
 #include <assert.h>
-#include "sc_file_log.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
+#include <plugin-qpp.h>
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
+QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "sc_file_log";
+#include "sc_file_log.h"
+#include "syscalls.h"
 
 get_syscall_arg_t get_syscall_arg = NULL;
 should_log_t should_log = NULL;
