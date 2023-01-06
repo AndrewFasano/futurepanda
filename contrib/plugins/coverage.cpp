@@ -72,6 +72,7 @@ typedef struct {
   uint32_t ppid;
   uint32_t create_time;
   char comm[64];
+  bool ignore;
   //uint32_t comm_hash;
   std::vector<vma_t*>* vmas;
   //std::set<bb_entry_t*, block_cmp>* blocks;
@@ -191,6 +192,7 @@ static void vcpu_tb_exec(unsigned int cpu_index, void *udata)
       return;
 
     if (!current_proc) return; // Start up: no idea where we are (unexpected that we'd get here?)
+    if (current_proc->ignore) return; // Start up: no idea where we are (unexpected that we'd get here?)
 
     bb_entry_t *bb = (bb_entry_t *) udata;
 
@@ -292,7 +294,6 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       if (qemu_plugin_read_guest_virt_mem(a1, &pending_proc.comm, sizeof(pending_proc.comm)) == -1) {
         strncpy(pending_proc.comm, "[error]", sizeof(pending_proc.comm));
       }
-      //pending_proc.comm_hash = hash(pending_proc.comm);
       break;
     }
 
@@ -302,9 +303,14 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
 
     case 592: // PPID
       pending_proc.ppid = (uint32_t)a1;
+      break;
 
-    case 593: { // create time
+    case 593: // create time
       pending_proc.create_time = (uint32_t)a1;
+      break;
+
+    case 594: { // is/isn't kernel thread (end of create proc)
+      pending_proc.ignore = (a1 != 0);
 
       auto k = std::make_tuple(pending_proc.pid, pending_proc.create_time);
       if (proc_map->find(k) == proc_map->end()) {
@@ -312,30 +318,31 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
         g_mutex_lock(&lock);
         (*proc_map)[k] = (proc_t*)malloc(sizeof(proc_t));
         (*proc_map)[k]->pid = pending_proc.pid;
+        (*proc_map)[k]->ignore = pending_proc.ignore;
         (*proc_map)[k]->ppid = pending_proc.ppid;
         (*proc_map)[k]->create_time = pending_proc.create_time;
         (*proc_map)[k]->vmas = new std::vector<vma_t*>;
         (*proc_map)[k]->prev_location = hash(pending_proc.comm);
-        //(*proc_map)[k]->comm_hash = hash(pending_proc.comm);
         //(*proc_map)[k]->blocks = new std::set<bb_entry_t*, block_cmp>;
         strncpy((*proc_map)[k]->comm, pending_proc.comm, sizeof((*proc_map)[k]->comm));
         g_mutex_unlock(&lock);
       }
       // Update current proc
       current_proc = (*proc_map)[k];
-      //printf("proc is now %s\n", current_proc->comm);
-
       // End of process switch: let's log it
-      //printf("Swithed to process %s with PID %d and PPID %d\n", pending_proc.comm, pending_proc.pid, pending_proc.ppid);
+      //if (!current_proc->ignore)
+      //  printf("Swithed to process %s with PID %d and PPID %d\n", pending_proc.comm, pending_proc.pid,
+      //                                                            pending_proc.ppid);
       break;
     }
 
-    case 595: { // update proc name (execve)
+    case 595: // update proc name: kernel task
+    case 596: { // update proc name: non-kernel task
       // Don't reset current_proc, just modify its name in place
       if (qemu_plugin_read_guest_virt_mem(a1, &current_proc->comm, sizeof(current_proc->comm)) != -1) {
         current_proc->prev_location = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
-        //current_proc->comm_hash = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
       }
+      current_proc->ignore = (num == 595); // Ignore if kernel task, otherwise don't
     }
 
 
