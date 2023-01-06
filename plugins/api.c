@@ -42,9 +42,11 @@
 #include "exec/ram_addr.h"
 #include "exec/address-spaces.h"
 #include "disas/disas.h"
+
 #include "plugin.h"
 #ifndef CONFIG_USER_ONLY
 #include "qemu/plugin-memory.h"
+#include "migration/snapshot.h"
 #include "hw/boards.h"
 #else
 #include "qemu.h"
@@ -390,6 +392,17 @@ void *qemu_plugin_virt_to_host(uint64_t addr, int len)
     return qemu_map_ram_ptr(mr->ram_block, addr1);
 #else
     return NULL;
+#endif
+}
+
+bool qemu_plugin_save_snapshot(char* name, bool overwrite)
+{
+#ifdef CONFIG_SOFTMMU
+  Error *err = NULL;
+  save_snapshot(name, overwrite, NULL, false, NULL, &err);
+  return true;
+#else
+    return false;
 #endif
 }
 
