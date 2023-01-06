@@ -14,6 +14,7 @@ VPATH += $(SRC_PATH)/contrib/plugins
 
 NAMES :=
 NAMES += coverage
+NAMES += netbinds
 NAMES += execlog
 NAMES += hotblocks
 NAMES += hotpages
@@ -75,6 +76,12 @@ coverage.o: coverage.cpp
 	$(CC) $(CPPFLAGS) -c -o $@ $<
 
 libcoverage.so: coverage.o
+	$(CC) -shared -Wl,-soname,$@ -o $@ $^ $(LDLIBS) $(CPPLDLIBS)
+
+netbinds.o: netbinds.cpp
+	$(CC) $(CPPFLAGS) -c -o $@ $<
+
+libnetbinds.so: netbinds.o
 	$(CC) -shared -Wl,-soname,$@ -o $@ $^ $(LDLIBS) $(CPPLDLIBS)
 
 %.o: %.c
