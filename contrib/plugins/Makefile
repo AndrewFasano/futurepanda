@@ -46,6 +46,7 @@ CPPFLAGS += -fPIC -Wall
 CPPFLAGS += $(if $(findstring no-psabi,$(QEMU_CFLAGS)),-Wpsabi)
 CPPFLAGS += -idirafter $(SRC_PATH)/include/qemu
 CPPFLAGS += -g
+CPPLDLIBS=-lstdc++
 
 all: $(SONAMES)
 
@@ -72,6 +73,9 @@ hw_proc_id.o: hw_proc_id.cpp
 
 coverage.o: coverage.cpp
 	$(CC) $(CPPFLAGS) -c -o $@ $<
+
+libcoverage.so: coverage.o
+	$(CC) -shared -Wl,-soname,$@ -o $@ $^ $(LDLIBS) $(CPPLDLIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
