@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <qemu-plugin.h>
 #include <plugin-qpp.h>
-#include "syscalls.h"
-#include "osi_linux/osi_types.h"
 
+#include "osi_linux/osi_types.h"
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "syscalls_logger";
 #include "osi.h"
+#include "syscalls.h"
  
 void log_syscall(gpointer evdata, gpointer udata);
 
