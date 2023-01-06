@@ -6,6 +6,10 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <glib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
 #include <vector>
 #include <tuple>
 #include <set>
@@ -18,9 +22,9 @@ QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "coverage";
 #include <plugin-qpp.h>
 }
 
-//static FILE *fp;
-//static const char *file_name = "file.trace";
-static const char *map_name = "coverage.map";
+static const char *covfile = "coverage.map";
+static const char *bindfile = "vpn.csv";
+
 static GMutex lock;
 //const uint64_t fnv_prime = 0x100000001b3ULL;
 const uint32_t fnv_prime = 0x811C9DC5;
@@ -39,6 +43,14 @@ typedef struct {
   uint32_t vma_end;
   char filename[64];
 } vma_t;
+
+typedef struct {
+  uint32_t pid;
+  uint32_t type;
+  uint32_t ipv; // 4 or 6
+  char ip_addr[64]; // 1.2.3.4, 1:2:3:...
+  uint32_t port;
+} bind_t;
 
 typedef struct {
     uint32_t start;
@@ -91,13 +103,73 @@ uint32_t hash(char *input) {
     return rv;
 }
 
+int find_open_port() {
+  // https://stackoverflow.com/a/20850182
+  int sock = socket(AF_INET, SOCK_STREAM, 0);
+  assert(sock >= 0);
+
+  struct sockaddr_in serv_addr;
+  bzero((char *) &serv_addr, sizeof(serv_addr));
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_addr.s_addr = INADDR_ANY;
+  serv_addr.sin_port = 0;
+  if (bind(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+    perror("Error finding free port");
+    return -1;
+  }
+
+  socklen_t len = sizeof(serv_addr);
+  if (getsockname(sock, (struct sockaddr *)&serv_addr, &len) == -1) {
+    perror("Error finding free port name");
+    return -1;
+  }
+
+  if (close (sock) < 0 ) {
+    perror("Error cleaning up in find free port");
+    return -1;
+  }
+
+  return ntohs(serv_addr.sin_port);
+
+}
+
+void report_bind(bind_t pending_bind) {
+    if (pending_bind.type >= 2) {
+      printf("ERROR: unknown protocol: %d\n", pending_bind.type);
+      return;
+    }
+
+    FILE *f = fopen(bindfile, "a");
+    int host_port = find_open_port();
+
+    assert(host_port > 0);
+
+    //(f"{proto},{listen_ip}:{listen_port},0.0.0.0:{host_port}\n")
+    if (pending_bind.ipv == 4) {
+      fprintf(f, "%s,%s:%d,0.0.0.0:%d\n",
+        /*proto*/ (pending_bind.type == 0) ? "tcp" : "udp",
+        /*ipv4*/ pending_bind.ip_addr,
+        /*port*/ pending_bind.port,
+        /*host port*/ host_port);
+    } else {
+      // Ipv6
+      fprintf(f, "%s,[%s]:%d,0.0.0.0:%d\n",
+        /*proto*/ (pending_bind.type == 0) ? "tcp" : "udp",
+        /*ipv4*/ pending_bind.ip_addr,
+        /*port*/ pending_bind.port,
+        /*host port*/ host_port);
+    }
+
+    fclose(f);
+}
+
 static void plugin_exit(qemu_plugin_id_t id, void *p)
 {
-    FILE *f = fopen(map_name, "wb");
+    FILE *f = fopen(covfile, "wb");
     fwrite(shared_mem, 1, MAP_SIZE, f);
     fclose(f);
 
-  
+
 #if 0
     for (auto& k : *proc_map) {
       proc_t *p = k.second;
@@ -115,7 +187,7 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
 proc_t *current_proc;
 static void vcpu_tb_exec(unsigned int cpu_index, void *udata)
 {
-    if (qemu_plugin_in_privileged_mode()) 
+    if (qemu_plugin_in_privileged_mode())
       return;
 
     if (!current_proc) return; // Start up: no idea where we are (unexpected that we'd get here?)
@@ -207,6 +279,7 @@ bool in_vma_loop = false;
 
 proc_t pending_proc;
 vma_t* pending_vma;
+bind_t pending_bind;
 
 void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, uint64_t a1, uint64_t a2,
                     uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7, uint64_t a8) {
@@ -325,6 +398,34 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
         strncpy(pending_vma->filename, "[???]", sizeof(pending_vma->filename));
       break;
 
+
+    /// NETWORK, fill pending_bind ///
+    case 5930: // Start. PID
+      pending_bind = {0};
+      pending_bind.pid = a1;
+      break;
+
+    case 5931: // Type
+      pending_bind.type = a1; // Type: 0=SOCK_STREAM, 1=SOCK_DGRAM, 2=other
+      if (a1 > 3) {
+        printf("ERROR bad ip type. HAVE: pid %d, ipv %d, type %d, ip_addr %s, port %d\n", pending_bind.pid, pending_bind.ipv, pending_bind.type, pending_bind.ip_addr, pending_bind.port);
+      }
+      break;
+
+    case 5932: // IPv4 address
+    case 5933: // IPv6 address
+        pending_bind.ipv = (num == 5932) ? 4 : 6;
+        if (qemu_plugin_read_guest_virt_mem(a1, &pending_bind.ip_addr, sizeof(pending_bind.ip_addr)) == -1) {
+          strncpy(pending_bind.ip_addr, "[error]", sizeof(pending_bind.ip_addr));
+        }
+      break;
+
+    case 5934:
+      pending_bind.port = a1;
+      // All done
+      report_bind(pending_bind);
+      break;
+
     default:
       printf("ERROR: unknown hypercall number %ld with arg %lx\n", num, a1);
   }
@@ -338,9 +439,14 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info,
 {
     for (int i = 0; i < argc; i++) {
         g_autofree char **tokens = g_strsplit(argv[i], "=", 2);
-        if (g_strcmp0(tokens[0], "filename") == 0) {
+        if (g_strcmp0(tokens[0], "covfile") == 0) {
             //file_name = g_strdup(tokens[1]);
-            map_name = g_strdup(tokens[1]);
+            covfile = g_strdup(tokens[1]);
+        }
+        if (g_strcmp0(tokens[0], "bindfile") == 0) {
+            //file_name = g_strdup(tokens[1]);
+            bindfile = g_strdup(tokens[1]);
+            fclose(fopen(bindfile, "w")); // Empty file
         }
     }
 
