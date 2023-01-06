@@ -275,6 +275,20 @@ typedef void
 void qemu_plugin_register_vcpu_tlb_flush_cb(qemu_plugin_id_t id,
                                             qemu_plugin_vcpu_udata_cb_t cb,
                                             void *userdata);
+
+/**
+ * qemu_plugin_register_main_loop_cb() - register callback to run on the next main loop
+ * change
+ * @id: plugin ID
+ * @cb: callback
+ * @userdata: user data for callback
+ *
+ * The @cb function is called when the main loop runs
+ *
+ */
+void qemu_plugin_register_main_loop_cb(qemu_plugin_id_t id,
+                                            qemu_plugin_udata_cb_t cb,
+                                            void *userdata);
 /**
  * qemu_plugin_register_vcpu_hypercall_cb() - register a vCPU callback on hypercall
  * change
@@ -522,6 +536,12 @@ uint64_t qemu_plugin_virt_to_phys(uint64_t addr);
  * Returns: Host virtual address
  */
 void* qemu_plugin_virt_to_host(uint64_t addr, int len);
+
+/**
+ * Take a snapshot of the guest. Must be run from main loop
+ *
+ */
+bool qemu_plugin_save_snapshot(char* name, bool overwrite);
 
 /**
  * qemu_plugin_tb_get_insn() - retrieve handle for instruction

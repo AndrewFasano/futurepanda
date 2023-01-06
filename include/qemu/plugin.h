@@ -27,6 +27,7 @@ enum qemu_plugin_event {
     QEMU_PLUGIN_EV_VCPU_SYSCALL_RET,
     QEMU_PLUGIN_EV_VCPU_TLB_FLUSH,
     QEMU_PLUGIN_EV_VCPU_HYPERCALL,
+    QEMU_PLUGIN_EV_MAIN_LOOP,
     QEMU_PLUGIN_EV_FLUSH,
     QEMU_PLUGIN_EV_ATEXIT,
     QEMU_PLUGIN_EV_LOADVM,
@@ -200,6 +201,7 @@ void qemu_plugin_vcpu_exit_hook(CPUState *cpu);
 void qemu_plugin_tb_trans_cb(CPUState *cpu, struct qemu_plugin_tb *tb);
 void qemu_plugin_vcpu_idle_cb(CPUState *cpu);
 void qemu_plugin_vcpu_tlb_flush_cb(CPUState *cpu);
+void qemu_plugin_main_loop_cb(void);
 void
 qemu_plugin_vcpu_hypercall_cb(CPUState *cpu, int64_t num, uint64_t a1,
                          uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5,
@@ -274,6 +276,9 @@ static inline void qemu_plugin_vcpu_exit_hook(CPUState *cpu)
 { }
 
 static inline void qemu_plugin_vcpu_tlb_flush_cb(CPUState *cpu)
+{ }
+
+static inline void qemu_plugin_main_loop_cb(void)
 { }
 
 static inline void qemu_plugin_vcpu_hypercall_cb(CPUState *cpu, int64_t num, uint64_t a1,

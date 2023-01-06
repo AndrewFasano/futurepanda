@@ -22,6 +22,7 @@
 #include "qemu/rcu.h"
 #include "hw/core/cpu.h"
 #include "exec/cpu-common.h"
+#include "qemu/main-loop.h"
 
 #include "exec/exec-all.h"
 #include "exec/helper-proto.h"
@@ -152,6 +153,7 @@ static void plugin_cb__udata(enum qemu_plugin_event ev)
 
     switch (ev) {
     case QEMU_PLUGIN_EV_ATEXIT:
+    case QEMU_PLUGIN_EV_MAIN_LOOP:
         QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
             qemu_plugin_udata_cb_t func = cb->f.udata;
 
@@ -248,6 +250,10 @@ void qemu_plugin_vcpu_init_hook(CPUState *cpu)
 
 void qemu_plugin_vcpu_tlb_flush_cb(CPUState *cpu) {
     plugin_vcpu_cb__simple(cpu, QEMU_PLUGIN_EV_VCPU_TLB_FLUSH);
+}
+
+void qemu_plugin_main_loop_cb(void) {
+    plugin_cb__udata(QEMU_PLUGIN_EV_MAIN_LOOP);
 }
 
 void qemu_plugin_vcpu_hypercall_cb(CPUState *cpu, int64_t num, uint64_t a1, uint64_t a2,
@@ -648,6 +654,15 @@ static bool plugin_dyn_cb_arr_cmp(const void *ap, const void *bp)
     return ap == bp;
 }
 
+static void plugin_poll_notify(Notifier *notifier, void *data) {
+  MainLoopPoll *poll = data;
+  if (poll->state !=  MAIN_LOOP_POLL_OK)
+    return;
+
+  // Run CB
+  qemu_plugin_main_loop_cb();
+}
+
 static void __attribute__((__constructor__)) plugin_init(void)
 {
     int i;
@@ -662,4 +677,10 @@ static void __attribute__((__constructor__)) plugin_init(void)
     qht_init(&plugin.dyn_cb_arr_ht, plugin_dyn_cb_arr_cmp, 16,
              QHT_MODE_AUTO_RESIZE);
     atexit(qemu_plugin_atexit_cb);
+
+    // Set up a notifier with main_loop so plugins can run events in the main_loop
+    Notifier *n = (Notifier*) malloc(sizeof(Notifier));
+    n->notify = plugin_poll_notify;
+    main_loop_poll_add_notifier(n);
+
 }
