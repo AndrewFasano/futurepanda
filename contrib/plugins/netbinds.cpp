@@ -120,7 +120,7 @@ void take_snap(qemu_plugin_id_t id, void* udata) {
     // if this is a new (i.e.: not previously snapped) service
     char snap_name[256] ;
     snprintf(snap_name, 256, "%s__%d__%s__%s",
-        /*proto */ (pending_bind.type == 0) ? "tcp" : "udp",
+        /*proto */ (details->proto == 0) ? "tcp" : "udp",
         /* port */ details->port,
         /* ip   */  details->ip_addr,
         /* proc */  details->comm);
@@ -303,7 +303,7 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
 
       if (had_snapshots) {
         // Guest should keep retrying quickly so when we restore the snapshot it's good to go!
-        if (qemu_plugin_write_guest_virt_mem(gva, &retry, sizeof(sleep)) == -1) {
+        if (qemu_plugin_write_guest_virt_mem(gva, &retry, sizeof(retry)) == -1) {
           printf("ERROR couldn't send in data: GVA %#lx\n", gva);
         }
 
