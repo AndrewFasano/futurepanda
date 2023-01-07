@@ -339,39 +339,40 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
     case 595: // update proc name: kernel task
     case 596: { // update proc name: non-kernel task
       // Don't reset current_proc, just modify its name in place
-      if (qemu_plugin_read_guest_virt_mem(a1, &current_proc->comm, sizeof(current_proc->comm)) != -1) {
-        current_proc->prev_location = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
+      if (current_proc != NULL) {
+        if (qemu_plugin_read_guest_virt_mem(a1, &current_proc->comm, sizeof(current_proc->comm)) != -1) {
+          current_proc->prev_location = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
+        }
+        current_proc->ignore = (num == 595); // Ignore if kernel task, otherwise don't
       }
-      current_proc->ignore = (num == 595); // Ignore if kernel task, otherwise don't
     }
-
 
     /// VMA LOOP. Populate pending_vma, then add to current_proc->vmas ////
     case 5910: // start, step, and finish VMA loop
-      if (a1 == 1 && !in_vma_loop) { // Starting
-        in_vma_loop = true;
-        current_proc->vmas->clear(); // Always clear VMAs for current proc on VMA update
-        pending_vma = new vma_t;
+      if (current_proc != NULL) {
+        if (a1 == 1 && !in_vma_loop) { // Starting
+          in_vma_loop = true;
+          current_proc->vmas->clear(); // Always clear VMAs for current proc on VMA update
+          pending_vma = new vma_t;
 
-      } else if (a1 == 3 && in_vma_loop) {
-        in_vma_loop = false;
-        //for (auto &e : current_proc->vmas) {
-        //  printf("In %s (%d): VMA named %s goes from %x to %x\n", current_proc->comm, current_proc->pid, e->filename, e->vma_start, e->vma_end);
-        //}
+        } else if (a1 == 3 && in_vma_loop) {
+          in_vma_loop = false;
+          //for (auto &e : current_proc->vmas) {
+          //  printf("In %s (%d): VMA named %s goes from %x to %x\n", current_proc->comm, current_proc->pid, e->filename, e->vma_start, e->vma_end);
+          //}
 
-      } else if (a1 == 2 && in_vma_loop) {
-        // Finished a VMA
-        g_mutex_lock(&lock);
-        current_proc->vmas->push_back(pending_vma); // Move current vma into list and allocate a new one
-        g_mutex_unlock(&lock);
+        } else if (a1 == 2 && in_vma_loop) {
+          // Finished a VMA
+          g_mutex_lock(&lock);
+          current_proc->vmas->push_back(pending_vma); // Move current vma into list and allocate a new one
+          g_mutex_unlock(&lock);
 
-        // Allocate a new one
-        pending_vma = new vma_t;
+          // Allocate a new one
+          pending_vma = new vma_t;
 
-      } else {
-        // XXX: this happens... why?
-        //printf("ERROR: vma_loop_toggle %ld with in_vma_loop=%d\n", a1, in_vma_loop);
-        //assert(0);
+        } else {
+          printf("ERROR: vma_loop_toggle %ld with in_vma_loop=%d\n", a1, in_vma_loop);
+        }
       }
 
       break;
