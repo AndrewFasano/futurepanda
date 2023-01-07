@@ -375,6 +375,14 @@ int qemu_plugin_read_guest_virt_mem(uint64_t gva, void* buf, size_t length) {
 #endif
 }
 
+int qemu_plugin_write_guest_virt_mem(uint64_t gva, void* buf, size_t length) {
+#ifdef CONFIG_SOFTMMU
+    return cpu_memory_rw_debug(current_cpu, gva, buf, length, 1);
+#else
+    return -1;
+#endif
+}
+
 
 void *qemu_plugin_virt_to_host(uint64_t addr, int len)
 {

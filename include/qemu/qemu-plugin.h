@@ -522,6 +522,16 @@ bool qemu_plugin_unreg_callback(const char *target_plugin, const char *cb_name,
 int qemu_plugin_read_guest_virt_mem(uint64_t gva, void* buf, size_t length);
 
 /**
+ * qemu_plugin_write_guest_virt_mem() - Write a buffer of guest memory
+ * @gva: Guest virtual address
+ * @buf: Host buffer to copy from
+ * @length: Size of buf
+ *
+ * Returns: -1 on failure
+ */
+int qemu_plugin_write_guest_virt_mem(uint64_t gva, void* buf, size_t length);
+
+/**
  * Translates guest virtual addres to a guest physical address.
  * @gva: Guest virtual address
  *
