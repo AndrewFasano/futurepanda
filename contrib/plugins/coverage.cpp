@@ -10,6 +10,10 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+ #include <sys/socket.h>
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+
 #include <vector>
 #include <tuple>
 #include <set>
@@ -93,6 +97,39 @@ struct hash_tuple {
 // If this isn't on the heap it will vanish before our plugin_exit is called. Ugh!
 std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple> *proc_map = \
     new std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple>;
+
+
+struct __attribute__((__packed__)) guest_cmd_ipv4 {
+  uint32_t command;
+  //uint32_t zeros_a;
+
+  uint32_t is_ipv6; // Bool with 3 bytes padding before
+  uint32_t zeros_a;
+
+  uint32_t ip; // 4 bytes. Should have 8 bytes before
+  uint16_t port; // Big endian
+
+  uint16_t zeros_b;
+  uint16_t is_udp; // Bool with 1 byte padding before
+
+  uint8_t data[1024];
+};
+
+struct guest_cmd_ipv6 {
+  char command[1];
+  char zeros_a[4];
+
+  bool is_ipv6;
+  char zeros_b[3];
+
+  char ip[16];
+  char port[2]; // Big endian
+
+  bool is_udp;
+  char zeros_c[3];
+
+  char data[1024];
+};
 
 uint32_t hash(char *input) {
     uint32_t rv = 0;
@@ -458,10 +495,25 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       uint64_t gva = (uint64_t)a1;
 
       // Do we want to fuzz something? We probably should, if not, what are we doing here?
-      char payload[] = {"\x02" "AAAAAAA"};
+
+      // Create buffer
+      guest_cmd_ipv4 cmd = {0};
+
+      cmd.command = 0xffffffff; // Always ffs
+      cmd.ip = inet_addr("127.0.0.1") ;
+      cmd.is_ipv6 = 0;
+      cmd.port = 8000;
+
+      for (size_t i=0; i < sizeof(cmd.data); i++) {
+        cmd.data[i] = char(1);
+      }
+
+      for (size_t i=0; i < sizeof(cmd); i++) {
+        printf("%d, ", ((char*)&cmd)[i]);
+      }
 
       // Guest should keep retrying quickly so when we restore the snapshot it's good to go!
-      if (qemu_plugin_write_guest_virt_mem(gva, &payload, sizeof(payload)) == -1) {
+      if (qemu_plugin_write_guest_virt_mem(gva, &cmd, sizeof(cmd)) == -1) {
         printf("ERROR couldn't send in data: GVA %#lx\n", gva);
       }
       break;
