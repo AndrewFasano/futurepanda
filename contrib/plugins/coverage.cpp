@@ -378,32 +378,36 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       break;
 
     case 5911: {
-      assert(in_vma_loop);
-      pending_vma->vma_start = (uint32_t)a1;
+      if (in_vma_loop) {
+        pending_vma->vma_start = (uint32_t)a1;
+      }
       break;
       }
 
     case 5912:
-      assert(in_vma_loop);
-      pending_vma->vma_end = (uint32_t)a1;
+      if (in_vma_loop) {
+        pending_vma->vma_end = (uint32_t)a1;
+      }
       break;
 
     case 5913: {
-        assert(in_vma_loop);
+      if (in_vma_loop) {
         if (qemu_plugin_read_guest_virt_mem(a1, &pending_vma->filename, sizeof(pending_vma->filename)) == -1) {
           strncpy(pending_vma->filename, "[error]", sizeof(pending_vma->filename));
         }
+      }
       break;
       }
 
     case 5914:
-      assert(in_vma_loop);
-      if (a1 == 1)
-        strncpy(pending_vma->filename, "[heap]", sizeof(pending_vma->filename));
-      else if (a1 == 2)
-        strncpy(pending_vma->filename, "[stack]", sizeof(pending_vma->filename));
-      else if (a1 == 3)
-        strncpy(pending_vma->filename, "[???]", sizeof(pending_vma->filename));
+      if (in_vma_loop) {
+        if (a1 == 1)
+          strncpy(pending_vma->filename, "[heap]", sizeof(pending_vma->filename));
+        else if (a1 == 2)
+          strncpy(pending_vma->filename, "[stack]", sizeof(pending_vma->filename));
+        else if (a1 == 3)
+          strncpy(pending_vma->filename, "[???]", sizeof(pending_vma->filename));
+      }
       break;
 
 
@@ -433,6 +437,20 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       // All done
       report_bind(pending_bind);
       break;
+
+    /// In-guest driver ///
+    case 6001: { // Guest is ready for data
+      uint64_t gva = (uint64_t)a1;
+
+      // Do we want to fuzz something? We probably should, if not, what are we doing here?
+      char payload[] = {"\x02" "AAAAAAA"};
+
+      // Guest should keep retrying quickly so when we restore the snapshot it's good to go!
+      if (qemu_plugin_write_guest_virt_mem(gva, &payload, sizeof(payload)) == -1) {
+        printf("ERROR couldn't send in data: GVA %#lx\n", gva);
+      }
+      break;
+    }
 
     default:
       printf("ERROR: unknown hypercall number %ld with arg %lx\n", num, a1);
