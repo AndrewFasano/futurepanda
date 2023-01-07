@@ -23,7 +23,7 @@ QEMU_PLUGIN_EXPORT const char *qemu_plugin_name = "coverage";
 }
 
 static const char *covfile = "coverage.map";
-static const char *bindfile = "vpn.csv";
+static const char *bindfile = "cvpn.csv";
 
 static GMutex lock;
 //const uint64_t fnv_prime = 0x100000001b3ULL;
@@ -135,6 +135,7 @@ int find_open_port() {
 }
 
 void report_bind(bind_t pending_bind) {
+    // TODO: if we see a bind while fuzzing we can just print instead of logging to file?
     if (pending_bind.type >= 2) {
       printf("ERROR: unknown protocol: %d\n", pending_bind.type);
       return;
@@ -329,6 +330,13 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       }
       // Update current proc
       current_proc = (*proc_map)[k];
+
+      if (!current_proc->ignore &&
+        // Ignore VPN and tokio
+        (strncmp(current_proc->comm, "vpn", sizeof(current_proc->comm)) == 0 ||
+         strncmp(current_proc->comm, "tokio-runtime-w", sizeof(current_proc->comm)) == 0)) {
+          current_proc->ignore = true;
+      }
       // End of process switch: let's log it
       //if (!current_proc->ignore)
       //  printf("Swithed to process %s with PID %d and PPID %d\n", pending_proc.comm, pending_proc.pid,
@@ -344,8 +352,15 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
           current_proc->prev_location = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
         }
         current_proc->ignore = (num == 595); // Ignore if kernel task, otherwise don't
+        if (!current_proc->ignore &&
+          // Ignore VPN and tokio
+          (strncmp(current_proc->comm, "vpn", sizeof(current_proc->comm)) == 0 ||
+           strncmp(current_proc->comm, "tokio-runtime-w", sizeof(current_proc->comm)) == 0)) {
+            current_proc->ignore = true;
+          }
       }
     }
+    break;
 
     /// VMA LOOP. Populate pending_vma, then add to current_proc->vmas ////
     case 5910: // start, step, and finish VMA loop
