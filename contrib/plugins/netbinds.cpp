@@ -89,26 +89,66 @@ struct hash_tuple {
 std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple> *proc_map = \
     new std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple>;
 
-proc_t *current_proc;
-
 typedef struct {
-  bool do_it;
-  char name[256];
+  bool pending;
+  uint32_t port;
+  uint32_t proto;
+  char ip_addr[64];
+  char comm[64];
 } snap_t;
+ 
+// Heap allocated
+std::vector<snap_t*> *pending_snaps = new std::vector<snap_t*>;
+std::set<uint32_t> snap_hashes;
+
+const uint32_t fnv_prime = 0x811C9DC5;
+uint32_t hash(char *input) {
+    uint32_t rv = 0;
+    for (size_t i=0; i < strlen(input); i++) {
+      rv *= fnv_prime;
+      rv ^= (uint32_t)input[i];
+    }
+    return rv;
+}
 
 void take_snap(qemu_plugin_id_t id, void* udata) {
+  // XXX: Must run in main thread (i.e. with main loop callback)
   snap_t* details = (snap_t*)udata;
-  if (details->do_it) {
-    printf("Taking snapshot %s\n", details->name);
-    qemu_plugin_save_snapshot(details->name, true); // Must run in main thread
-    printf("Snapshot created\n");
-    details->do_it = false;
+
+  if (details->pending) {
+    // If the snapshot is pending we need to first figure out
+    // if this is a new (i.e.: not previously snapped) service
+    char snap_name[256] ;
+    snprintf(snap_name, 256, "%s__%d__%s__%s",
+        /*proto */ (pending_bind.type == 0) ? "tcp" : "udp",
+        /* port */ details->port,
+        /* ip   */  details->ip_addr,
+        /* proc */  details->comm);
+
+    uint32_t snap_hash = hash(snap_name);
+
+    if (snap_hashes.find(snap_hash) == snap_hashes.end()) {
+      // It's new - Log that we're taking a snapshot and update hash set
+      printf("Taking snapshot %s\n", snap_name);
+      qemu_plugin_save_snapshot(snap_name, true);
+      printf("Snapshot created\n");
+      snap_hashes.insert(hash(snap_name));
+    }
+
+    details->pending = false;
   }
 }
+
+proc_t *current_proc;
 
 void report_bind(bind_t pending_bind, proc_t* binder) {
     if (pending_bind.type >= 2) {
       printf("ERROR: unknown protocol: %d\n", pending_bind.type);
+      return;
+    }
+
+    if (binder == NULL) {
+      printf("ERROR: Want to report bind, but current process is unknown\n");
       return;
     }
 
@@ -136,12 +176,14 @@ void report_bind(bind_t pending_bind, proc_t* binder) {
 
     fclose(f);
 
-    // TEMP: take snapshot
     snap_t* details = new snap_t({
-      .do_it = true,
+      .pending = true,
+      .port = pending_bind.port,
+      .proto = pending_bind.type,
     });
-    snprintf(details->name, 256, "auto%s:%d_%s", pending_bind.ip_addr, pending_bind.port, binder->comm);
-    qemu_plugin_register_main_loop_cb(self_id, &take_snap, details);
+    strncpy(details->ip_addr, pending_bind.ip_addr, 64);
+    strncpy(details->comm, binder->comm, 64);
+    pending_snaps->push_back(details);
 }
 
 
@@ -196,10 +238,12 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
     case 595: // update proc name: kernel task
     case 596: // update proc name: non-kernel task
       // Don't reset current_proc, just modify its name in place
-      if (qemu_plugin_read_guest_virt_mem(a1, &current_proc->comm, sizeof(current_proc->comm)) != -1) {
-        //current_proc->prev_location = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
+      if (current_proc != NULL) {
+        if (qemu_plugin_read_guest_virt_mem(a1, &current_proc->comm, sizeof(current_proc->comm)) != -1) {
+          //current_proc->prev_location = hash(current_proc->comm); // Deterministically reset hash state since we're in a new program now
+        }
+        current_proc->ignore = (num == 595); // Ignore if kernel task, otherwise don't
       }
-      current_proc->ignore = (num == 595); // Ignore if kernel task, otherwise don't
 
     // VMAs: We don't care
     case 5910:
@@ -235,6 +279,45 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       pending_bind.port = a1;
       report_bind(pending_bind, current_proc);
       break;
+
+
+    /// In-guest driver ///
+    case 6001: { // Guest is ready for data
+      uint64_t gva = (uint64_t)a1;
+
+      // We have three possible responses that we'll send
+      // 1) 0: Go to sleep for a bit, no imminent data
+      // 2) 1: Don't sleep but retry (immininent data)
+      // 3) 2: Here's some data + metadata + 1024 byte message
+      char sleep[] = {"\x00"};
+      char retry[] = {"\x01"};
+
+      // If we have any pending snapshots: reply 1 and queue snapshot
+
+      bool had_snapshots = false;
+      for (auto snap : *pending_snaps) {
+        had_snapshots = true;
+        qemu_plugin_register_main_loop_cb(self_id, &take_snap, (void*)snap);
+      }
+      pending_snaps->clear(); // Erase the reference in pending_snaps, but it lives on in the heap and will show up in take_snap
+
+      if (had_snapshots) {
+        // Guest should keep retrying quickly so when we restore the snapshot it's good to go!
+        if (qemu_plugin_write_guest_virt_mem(gva, &retry, sizeof(sleep)) == -1) {
+          printf("ERROR couldn't send in data: GVA %#lx\n", gva);
+        }
+
+      } else {
+        // In this plugin we never have data to send - we just take opportunistic snapshots. So if no snapshots are pending
+        // tell the guest driver to chill
+        if (qemu_plugin_write_guest_virt_mem(gva, &sleep, sizeof(sleep)) == -1) {
+          printf("ERROR couldn't send in data: GVA %#lx\n", gva);
+        }
+
+      }
+
+      break;
+    }
 
     default:
       printf("ERROR: unknown hypercall number %ld with arg %lx\n", num, a1);
