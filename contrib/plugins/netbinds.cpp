@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+#include <algorithm>    // std::find
+#include <string.h>
 #include <vector>
 #include <tuple>
 #include <set>
@@ -89,17 +91,26 @@ struct hash_tuple {
 std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple> *proc_map = \
     new std::unordered_map<std::tuple<uint32_t, uint32_t>, proc_t*, hash_tuple>;
 
-typedef struct {
-  bool pending;
+struct service_t {
   uint32_t port;
   uint32_t proto;
   char ip_addr[64];
   char comm[64];
-} snap_t;
- 
-// Heap allocated
-std::vector<snap_t*> *pending_snaps = new std::vector<snap_t*>;
-std::set<uint32_t> snap_hashes;
+  bool snapped;
+
+  //bool operator==(const service_t &other) const
+  //{ return (port == other.port
+  //          && proto == other.proto
+  //          && strncmp(ip_addr, other.ip_addr, 64) == 0
+  //          && strncmp(comm, other.comm, 64) == 0);
+  //}
+
+};
+
+std::vector<service_t*>* launched_services = new std::vector<service_t*>;
+
+
+bool main_loop_wait_active = false;
 
 const uint32_t fnv_prime = 0x811C9DC5;
 uint32_t hash(char *input) {
@@ -111,32 +122,29 @@ uint32_t hash(char *input) {
     return rv;
 }
 
+int snap_counter = 0;
+
 void take_snap(qemu_plugin_id_t id, void* udata) {
   // XXX: Must run in main thread (i.e. with main loop callback)
-  snap_t* details = (snap_t*)udata;
+  bool* active = (bool*)udata;
+  if (*active) return;
+  *active = true;
 
-  if (details->pending) {
-    // If the snapshot is pending we need to first figure out
-    // if this is a new (i.e.: not previously snapped) service
-    char snap_name[256] ;
-    snprintf(snap_name, 256, "%s__%d__%s__%s",
-        /*proto */ (details->proto == 0) ? "tcp" : "udp",
-        /* port */ details->port,
-        /* ip   */  details->ip_addr,
-        /* proc */  details->comm);
+  // Take a snapshot with a unique name, mark everything in launched_services as snapped
+  char snap_name[32];
+  snprintf(snap_name, 32, "snap_%d", snap_counter++);
 
-    uint32_t snap_hash = hash(snap_name);
-
-    if (snap_hashes.find(snap_hash) == snap_hashes.end()) {
-      // It's new - Log that we're taking a snapshot and update hash set
-      printf("Taking snapshot %s\n", snap_name);
-      qemu_plugin_save_snapshot(snap_name, true);
-      printf("Snapshot created\n");
-      snap_hashes.insert(hash(snap_name));
+  //g_mutex_lock(&lock);
+  for (auto service : *launched_services) {
+    if (!service->snapped) {
+      service->snapped = true; // Service is now snapped, well, it is in a sec
+      printf("Snapshot %s is valid for service %s listening on %s:%d proto=%d\n", snap_name,
+             service->comm, service->ip_addr, service->port, service->proto);
     }
-
-    details->pending = false;
   }
+  //g_mutex_unlock(&lock);
+  qemu_plugin_save_snapshot(snap_name, true);
+  main_loop_wait_active = false;
 }
 
 proc_t *current_proc;
@@ -152,40 +160,52 @@ void report_bind(bind_t pending_bind, proc_t* binder) {
       return;
     }
 
+    // We know the snap_name: at this point we haven't yet saved the service
+    // so when we next do, it will be at snap_counter
+    char snap_name[32];
+    snprintf(snap_name, 32, "snap_%d", snap_counter);
+
     FILE *f = fopen(bindfile, "a");
 
     if (pending_bind.ipv == 4) {
       // Proto, ip/[ipv6]:port, pid, proc_name
-      fprintf(f, "%s,%s:%d,%d,%s\n",
+      fprintf(f, "%s,%s:%d,%d,%s,%s\n",
         /*proto*/ (pending_bind.type == 0) ? "tcp" : "udp",
         /*ipv4*/ pending_bind.ip_addr,
         /*port*/ pending_bind.port,
         /* pid */ binder->pid,
-        /* proc_name */ binder->comm
+        /* proc_name */ binder->comm,
+        /* snap name */ snap_name
         );
     } else {
       // Ipv6
-      fprintf(f, "%s,[%s]:%d,%d,%s\n",
+      fprintf(f, "%s,[%s]:%d,%d,%s,%s\n",
         /*proto*/ (pending_bind.type == 0) ? "tcp" : "udp",
         /*ipv4*/ pending_bind.ip_addr,
         /*port*/ pending_bind.port,
         /* pid */ binder->pid,
-        /* proc_name */ binder->comm
+        /* proc_name */ binder->comm,
+        /* snap name */ snap_name
         );
     }
 
     fclose(f);
 
-    snap_t* details = new snap_t({
-      .pending = true,
+    // We've identified a process that we might want to snap
+
+    service_t *details  = new service_t({
       .port = pending_bind.port,
       .proto = pending_bind.type,
     });
     strncpy(details->ip_addr, pending_bind.ip_addr, 64);
     strncpy(details->comm, binder->comm, 64);
-    pending_snaps->push_back(details);
-}
 
+    auto match = std::find(launched_services->begin(), launched_services->end(), details);
+    if (match == launched_services->end()) {
+      // New service - let's add it, not yet snapshot
+      launched_services->push_back(details);
+    }
+}
 
 proc_t pending_proc;
 bind_t pending_bind;
@@ -293,15 +313,30 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
       char retry[] = {"\x01"};
 
       // If we have any pending snapshots: reply 1 and queue snapshot
+      //
+      // We have two states within pending: First state is when we haven't
+      // even queued the main_loop_wait. In this case we'll add it to the queue
+      // and tell the guest agent to retry
+      //
+      // The second state is when we've queued it up but the snapshot isn't done
+      // so we'll tell the guest agent to retry without re-adding to queueu
 
-      bool had_snapshots = false;
-      for (auto snap : *pending_snaps) {
-        had_snapshots = true;
-        qemu_plugin_register_main_loop_cb(self_id, &take_snap, (void*)snap);
+      g_mutex_lock(&lock);
+      if (!main_loop_wait_active) {
+        // Don't have anything queued up for the next main loop wait.
+        // But if there are any new services, we should queue it up
+        for (auto service : *launched_services) {
+          if (!service->snapped) {
+            main_loop_wait_active = true;
+            bool* active = new bool;
+            *active = false;
+            qemu_plugin_register_main_loop_cb(self_id, &take_snap, &active);
+          }
+        }
       }
-      pending_snaps->clear(); // Erase the reference in pending_snaps, but it lives on in the heap and will show up in take_snap
+      g_mutex_unlock(&lock);
 
-      if (had_snapshots) {
+      if (main_loop_wait_active) {
         // Guest should keep retrying quickly so when we restore the snapshot it's good to go!
         if (qemu_plugin_write_guest_virt_mem(gva, &retry, sizeof(retry)) == -1) {
           printf("ERROR couldn't send in data: GVA %#lx\n", gva);
@@ -313,7 +348,6 @@ void vcpu_hypercall(qemu_plugin_id_t id, unsigned int vcpu_index, int64_t num, u
         if (qemu_plugin_write_guest_virt_mem(gva, &sleep, sizeof(sleep)) == -1) {
           printf("ERROR couldn't send in data: GVA %#lx\n", gva);
         }
-
       }
 
       break;
@@ -333,9 +367,10 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info,
         g_autofree char **tokens = g_strsplit(argv[i], "=", 2);
         if (g_strcmp0(tokens[0], "bindfile") == 0) {
             bindfile = g_strdup(tokens[1]);
-            fclose(fopen(bindfile, "w")); // Empty file
         }
     }
+
+    fclose(fopen(bindfile, "w")); // Empty file
 
     self_id = id;
     qemu_plugin_register_vcpu_hypercall_cb(id, vcpu_hypercall);
