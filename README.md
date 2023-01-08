@@ -1,3 +1,8 @@
+# Project Archived
+
+This prototype has moved into the PANDA organization at https://github.com/panda-re/qemu.
+
+
 Future PANDA
 ----
 A prototype dynamic analysis platform built atop QEMU's plugin interface.
